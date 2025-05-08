@@ -1,52 +1,91 @@
 # Phone Location Bot
 
-A Telegram bot that provides carrier and location information for phone numbers. The bot includes an admin panel for user management and tracking.
+A Telegram bot that allows users to look up phone number information including country, carrier, and line type. The system includes a web-based admin panel for managing users, API keys, and viewing lookup history.
 
 ## Features
 
-- Phone number validation and location detection
-- Carrier identification (T-Mobile, AT&T, Verizon, and others)
-- Daily usage limits for users
-- Admin panel for managing users, API keys, and viewing statistics
-- API key rotation to avoid rate limits
+### Telegram Bot
+- Phone number lookup with detailed information
+- Country detection
+- Carrier information 
+- Line type detection (mobile, landline, VoIP)
+- User management with request limits
 
-## Environment Variables
+### Admin Panel
+- User-friendly dashboard with key statistics
+- User management (add, block, unblock users)
+- API key management (add, rotate, delete)
+- Request history with filtering options
+- User limit management
 
-Create a `.env` file with the following variables:
+## Requirements
 
+- Node.js (v14+)
+- npm or yarn
+- Telegram Bot Token (from BotFather)
+- Veriphone API Key
+
+## Installation
+
+1. Clone the repository:
 ```
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-VERIPHONE_API_KEY=your_veriphone_api_key_here
+git clone https://github.com/yourusername/phonelocater.git
+cd phonelocater
+```
+
+2. Install dependencies:
+```
+npm install
+```
+
+3. Create a `.env` file in the root directory with the following content:
+```
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+VERIPHONE_API_KEY=your_veriphone_api_key
 PORT=3000
 ADMIN_USERNAME=admin
-ADMIN_PASSWORD=secure_password_here
-SESSION_SECRET=a_secure_random_string
+ADMIN_PASSWORD=securepassword
+SESSION_SECRET=some_random_string
 ```
 
-## Local Development
+4. Start the application:
+```
+npm start
+```
 
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Create a `.env` file with the required environment variables
-4. Run the bot: `npm run dev`
+## Usage
 
-## Deployment on Railway
+### Telegram Bot
+1. Start a chat with your bot on Telegram
+2. Send a phone number in international format (e.g., +1234567890)
+3. The bot will respond with information about the phone number
 
-1. Create a new project on [Railway](https://railway.app/)
-2. Connect your GitHub repository
-3. Set up the environment variables in Railway
-4. Deploy the application
+### Admin Panel
+1. Access the admin panel at `http://localhost:3000/admin`
+2. Log in with your admin credentials (set in the .env file)
+3. Navigate through the dashboard to manage users, API keys, and view lookup history
 
-## Admin Panel
+## Deployment
 
-Access the admin panel at `/admin/login` to manage users, view statistics, and configure API keys.
+The application is configured for easy deployment on Railway. Refer to the `RAILWAY_DEPLOY.md` file for detailed deployment instructions.
 
-## Tech Stack
+## Directory Structure
 
-- Node.js
-- Express
-- SQLite
-- EJS templates
-- Telegram Bot API
-- Veriphone API
-- sent.dm API for carrier detection 
+```
+phonelocater/
+├── database/         # SQLite database files
+├── public/           # Static assets
+├── routes/           # Express routes
+│   └── admin.js      # Admin panel routes
+├── views/            # EJS templates
+│   └── admin/        # Admin panel views
+├── .env              # Environment variables
+├── .env.example      # Example environment variables
+├── index.js          # Main application entry point
+├── package.json      # Dependencies and scripts
+└── README.md         # This file
+```
+
+## License
+
+MIT 
