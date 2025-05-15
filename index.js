@@ -7,7 +7,6 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const expressLayouts = require('express-ejs-layouts');
 require('dotenv').config();
-const fs = require('fs');
 
 // Initialize Express app
 const app = express();
@@ -30,14 +29,6 @@ app.set('layout', 'admin/layout');
 app.use(express.urlencoded({ extended: true }));
 
 // Initialize database
-const dbDirectory = './database';
-
-// Ensure database directory exists
-if (!fs.existsSync(dbDirectory)) {
-    fs.mkdirSync(dbDirectory, { recursive: true });
-    console.log('Created database directory');
-}
-
 const db = new sqlite3.Database('./database/bot.db', (err) => {
     if (err) {
         console.error('Error opening database:', err);
@@ -465,7 +456,7 @@ async function getPhoneDetails(phoneNumberString, userId) {
 }
 
 // Function to check and update user limits
-async function checkUserLimit(userId) {
+async function checkUserLimit(userId, count = 1) {
     try {
         // Get today's date in YYYY-MM-DD format
         const today = new Date().toISOString().split('T')[0];
@@ -500,24 +491,24 @@ async function checkUserLimit(userId) {
                 limit: user.check_limit, 
                 used: 0, 
                 remaining: user.check_limit, 
-                canCheck: true 
+                canCheck: count <= user.check_limit 
             };
         }
         
-        // Check if user has reached their daily limit
-        if (user.daily_checks >= user.check_limit) {
-            console.log(`User ${userId} has reached their daily limit of ${user.check_limit} checks`);
+        // Check if user has reached or will exceed their daily limit
+        if (user.daily_checks + count > user.check_limit) {
+            console.log(`User ${userId} would exceed their daily limit of ${user.check_limit} checks`);
             return { 
                 limit: user.check_limit, 
                 used: user.daily_checks, 
-                remaining: 0, 
+                remaining: user.check_limit - user.daily_checks, 
                 canCheck: false 
             };
         }
         
-        // Increment daily checks
+        // Increment daily checks by the count parameter
         await new Promise((resolve, reject) => {
-            db.run('UPDATE users SET daily_checks = daily_checks + 1, last_check_date = ? WHERE telegram_id = ?', [today, userId], (err) => {
+            db.run('UPDATE users SET daily_checks = daily_checks + ?, last_check_date = ? WHERE telegram_id = ?', [count, today, userId], (err) => {
                 if (err) {
                     console.error('Error updating daily checks:', err);
                     reject(err);
@@ -529,8 +520,8 @@ async function checkUserLimit(userId) {
         
         return { 
             limit: user.check_limit, 
-            used: user.daily_checks + 1, 
-            remaining: user.check_limit - (user.daily_checks + 1), 
+            used: user.daily_checks + count, 
+            remaining: user.check_limit - (user.daily_checks + count), 
             canCheck: true 
         };
     } catch (error) {
@@ -573,7 +564,7 @@ bot.on('message', async (msg) => {
         if (inputText.startsWith('/')) {
             if (inputText === '/status') {
                 // Check user limit status
-                const limitInfo = await checkUserLimit(userId);
+                const limitInfo = await checkUserLimit(userId, 0); // Don't increment count for status checks
                 await bot.sendMessage(chatId, `📊 <b>Your Usage Status</b>\n\n<b>Daily Limit:</b> ${limitInfo.limit} checks\n<b>Used Today:</b> ${limitInfo.used} checks\n<b>Remaining:</b> ${limitInfo.remaining} checks`, { parse_mode: 'HTML' });
                 return;
             }
@@ -590,10 +581,10 @@ bot.on('message', async (msg) => {
             return;
         }
 
-        // Check user limit before processing
-        const limitInfo = await checkUserLimit(userId);
+        // Check user limit before processing with the count of phone numbers
+        const limitInfo = await checkUserLimit(userId, phoneNumbers.length);
         if (!limitInfo.canCheck) {
-            await bot.sendMessage(chatId, `⚠️ <b>Daily Limit Reached</b>\n\nYou have reached your daily limit of ${limitInfo.limit} checks. Please try again tomorrow.`, { parse_mode: 'HTML' });
+            await bot.sendMessage(chatId, `⚠️ <b>Daily Limit Reached</b>\n\nYou have reached your daily limit of ${limitInfo.limit} checks. Please try again tomorrow or send fewer numbers.`, { parse_mode: 'HTML' });
             return;
         }
 
@@ -624,6 +615,57 @@ bot.on('message', async (msg) => {
 // Import and use admin routes
 const adminRoutes = require('./routes/admin');
 app.use('/admin', adminRoutes);
+
+// Root path handler
+app.get('/', (req, res) => {
+    res.send(`
+        <html>
+        <head>
+            <title>Phone Locator Bot</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { 
+                    font-family: Arial, sans-serif; 
+                    margin: 0; 
+                    padding: 20px; 
+                    text-align: center;
+                    background-color: #f5f5f5;
+                }
+                .container {
+                    max-width: 600px;
+                    margin: 40px auto;
+                    padding: 20px;
+                    background: white;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                }
+                h1 { color: #333; }
+                .telegram-button {
+                    display: inline-block;
+                    background-color: #0088cc;
+                    color: white;
+                    padding: 10px 20px;
+                    border-radius: 5px;
+                    text-decoration: none;
+                    margin-top: 20px;
+                    font-weight: bold;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>📱 Phone Locator Bot</h1>
+                <p>This bot helps you verify phone numbers and provides detailed carrier information.</p>
+                <p>To use the bot, simply open Telegram and search for the bot.</p>
+                <a href="https://t.me/YourBotUsername" class="telegram-button">Open in Telegram</a>
+                <p style="margin-top: 30px; font-size: 0.8em; color: #666;">
+                    Created by <a href="https://t.me/ZhongKai_KL">@ZhongKai_KL</a>
+                </p>
+            </div>
+        </body>
+        </html>
+    `);
+});
 
 // Start the Express server
 app.listen(port, () => {
