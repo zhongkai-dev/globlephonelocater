@@ -1,5 +1,4 @@
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./database/bot.db');
+const { db } = require('./db-compat');
 
 console.log('Starting database migration for carrier information...');
 

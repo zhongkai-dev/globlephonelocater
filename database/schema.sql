@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     first_name TEXT,
     last_name TEXT,
     is_blocked INTEGER DEFAULT 0,
-    check_limit INTEGER DEFAULT 10,
+    check_limit INTEGER DEFAULT 1000,
     daily_checks INTEGER DEFAULT 0,
     last_check_date DATE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP

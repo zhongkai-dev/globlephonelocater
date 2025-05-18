@@ -1,107 +1,193 @@
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Lookup History</h2>
-    <div class="d-flex">
-        <form action="/admin/history" method="GET" class="d-flex me-2">
-            <div class="input-group">
-                <input type="date" name="from" class="form-control" value="<%= filters.from %>">
-                <span class="input-group-text">to</span>
-                <input type="date" name="to" class="form-control" value="<%= filters.to %>">
-                <select name="carrier_type" class="form-select">
-                    <option value="" <%= !filters.carrier_type ? 'selected' : '' %>>All Carriers</option>
-                    <option value="tmobile" <%= filters.carrier_type === 'tmobile' ? 'selected' : '' %>>T-Mobile</option>
-                    <option value="att" <%= filters.carrier_type === 'att' ? 'selected' : '' %>>AT&T</option>
-                    <option value="verizon" <%= filters.carrier_type === 'verizon' ? 'selected' : '' %>>Verizon</option>
-                    <option value="other" <%= filters.carrier_type === 'other' ? 'selected' : '' %>>Other</option>
-                </select>
-                <button type="submit" class="btn btn-outline-primary">Filter</button>
+<!-- History page -->
+<div class="content-wrapper">
+    <div class="content-header">
+        <div class="container-fluid">
+            <div class="row mb-2">
+                <div class="col-sm-6">
+                    <h1 class="m-0">Lookup History</h1>
+                </div>
+                <div class="col-sm-6">
+                    <ol class="breadcrumb float-sm-right">
+                        <li class="breadcrumb-item"><a href="/admin/dashboard">Dashboard</a></li>
+                        <li class="breadcrumb-item active">Lookup History</li>
+                    </ol>
+                </div>
             </div>
-        </form>
-        <form action="/admin/history/export" method="GET">
-            <button type="submit" class="btn btn-success">
-                <i class="bi bi-file-excel"></i> Export
-            </button>
-        </form>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="container-fluid">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">All Lookups</h3>
+                </div>
+                <div class="card-body table-responsive p-0">
+                    <table class="table table-hover text-nowrap">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Phone Number</th>
+                                <th>Country</th>
+                                <th>Region</th>
+                                <th>Carrier</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% if (history && history.length > 0) { %>
+                                <% history.forEach(entry => { %>
+                                    <tr>
+                                        <td>
+                                            <a href="/admin/users/<%= entry.user.telegram_id %>">
+                                                <%= entry.user.username || entry.user.first_name || 'Unknown' %>
+                                            </a>
+                                        </td>
+                                        <td><%= entry.phone_number %></td>
+                                        <td><%= entry.country || 'N/A' %></td>
+                                        <td><%= entry.region || 'N/A' %></td>
+                                        <td>
+                                            <% if (entry.carrier) { %>
+                                                <div class="carrier-pill <%= getCarrierClass(entry.carrier_type) %>">
+                                                    <%= entry.carrier %>
+                                                </div>
+                                            <% } else { %>
+                                                <span class="badge bg-secondary">N/A</span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <% if (entry.is_valid === 1) { %>
+                                                <span class="badge bg-success">Valid</span>
+                                            <% } else { %>
+                                                <span class="badge bg-danger">Invalid</span>
+                                            <% } %>
+                                        </td>
+                                        <td><%= entry.created_at ? new Date(entry.created_at).toLocaleString() : 'N/A' %></td>
+                                    </tr>
+                                <% }); %>
+                            <% } else { %>
+                                <tr>
+                                    <td colspan="7" class="text-center">No lookup history found.</td>
+                                </tr>
+                            <% } %>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer clearfix">
+                    <% if (pagination.totalPages > 1) { %>
+                        <ul class="pagination pagination-sm m-0 float-right">
+                            <% if (pagination.currentPage > 1) { %>
+                                <li class="page-item">
+                                    <a class="page-link" href="/admin/history?page=1">&laquo;</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="/admin/history?page=<%= pagination.currentPage - 1 %>">Previous</a>
+                                </li>
+                            <% } %>
+                            
+                            <% 
+                                let startPage = Math.max(1, pagination.currentPage - 2);
+                                let endPage = Math.min(pagination.totalPages, startPage + 4);
+                                
+                                if (endPage - startPage < 4) {
+                                    startPage = Math.max(1, endPage - 4);
+                                }
+                            %>
+                            
+                            <% for (let i = startPage; i <= endPage; i++) { %>
+                                <li class="page-item <%= pagination.currentPage === i ? 'active' : '' %>">
+                                    <a class="page-link" href="/admin/history?page=<%= i %>"><%= i %></a>
+                                </li>
+                            <% } %>
+                            
+                            <% if (pagination.currentPage < pagination.totalPages) { %>
+                                <li class="page-item">
+                                    <a class="page-link" href="/admin/history?page=<%= pagination.currentPage + 1 %>">Next</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="/admin/history?page=<%= pagination.totalPages %>">&raquo;</a>
+                                </li>
+                            <% } %>
+                        </ul>
+                    <% } %>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="card shadow">
-    <div class="card-body">
-        <div class="table-responsive">
-            <table class="table table-striped">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>User</th>
-                        <th>Phone Number</th>
-                        <th>Country</th>
-                        <th>Region</th>
-                        <th>Carrier</th>
-                        <th>Valid</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% history.forEach(entry => { %>
-                        <tr>
-                            <td><%= entry.id %></td>
-                            <td>
-                                <a href="/admin/users/<%= entry.user_id %>">
-                                    <%= entry.username || entry.user_id %>
-                                </a>
-                            </td>
-                            <td><%= entry.phone_number %></td>
-                            <td><%= entry.country || 'N/A' %></td>
-                            <td><%= entry.region || 'N/A' %></td>
-                            <td>
-                                <% if (entry.carrier) { %>
-                                    <% if (entry.carrier_type === 'tmobile') { %>
-                                        <span class="badge bg-danger"><%= entry.carrier %></span>
-                                    <% } else if (entry.carrier_type === 'att') { %>
-                                        <span class="badge bg-primary"><%= entry.carrier %></span>
-                                    <% } else if (entry.carrier_type === 'verizon') { %>
-                                        <span class="badge bg-warning text-dark"><%= entry.carrier %></span>
-                                    <% } else { %>
-                                        <%= entry.carrier %>
-                                    <% } %>
-                                <% } else { %>
-                                    N/A
-                                <% } %>
-                            </td>
-                            <td>
-                                <span class="badge <%= entry.is_valid ? 'bg-success' : 'bg-danger' %>">
-                                    <%= entry.is_valid ? 'Valid' : 'Invalid' %>
-                                </span>
-                            </td>
-                            <td><%= new Date(entry.created_at).toLocaleString() %></td>
-                        </tr>
-                    <% }); %>
-                    <% if (history.length === 0) { %>
-                        <tr>
-                            <td colspan="8" class="text-center">No lookup history found</td>
-                        </tr>
-                    <% } %>
-                </tbody>
-            </table>
-        </div>
-        
-        <% if (pagination.totalPages > 1) { %>
-            <nav aria-label="History pagination">
-                <ul class="pagination justify-content-center">
-                    <li class="page-item <%= pagination.currentPage === 1 ? 'disabled' : '' %>">
-                        <a class="page-link" href="/admin/history?page=<%= pagination.currentPage - 1 %><%= filters.queryString %>">Previous</a>
-                    </li>
-                    
-                    <% for(let i = 1; i <= pagination.totalPages; i++) { %>
-                        <li class="page-item <%= pagination.currentPage === i ? 'active' : '' %>">
-                            <a class="page-link" href="/admin/history?page=<%= i %><%= filters.queryString %>"><%= i %></a>
-                        </li>
-                    <% } %>
-                    
-                    <li class="page-item <%= pagination.currentPage === pagination.totalPages ? 'disabled' : '' %>">
-                        <a class="page-link" href="/admin/history?page=<%= pagination.currentPage + 1 %><%= filters.queryString %>">Next</a>
-                    </li>
-                </ul>
-            </nav>
-        <% } %>
-    </div>
-</div> 
+<style>
+    .carrier-pill {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #333;
+    }
+    
+    .carrier-pill.tmobile {
+        background-color: #ffdedf; /* Light red for T-Mobile */
+        border: 1px solid #e63946;
+    }
+    
+    .carrier-pill.att {
+        background-color: #d9efff; /* Light blue for AT&T */
+        border: 1px solid #4895ef;
+    }
+    
+    .carrier-pill.verizon {
+        background-color: #fff8d9; /* Light yellow for Verizon */
+        border: 1px solid #ffb703;
+    }
+    
+    .carrier-pill.other {
+        background-color: #dbf0db; /* Light green for other carriers */
+        border: 1px solid #52b788;
+    }
+</style>
+
+<%
+// Helper functions for carrier display
+function getCarrierClass(carrierType) {
+    switch(carrierType) {
+        case 'tmobile':
+            return 'tmobile';
+        case 'att':
+            return 'att';
+        case 'verizon':
+            return 'verizon';
+        default:
+            return 'other';
+    }
+}
+
+// Helper function to get carrier icon letter
+function getCarrierIcon(carrierType) {
+    switch(carrierType) {
+        case 'tmobile':
+            return 'T';
+        case 'att':
+            return 'A';
+        case 'verizon':
+            return 'V';
+        default:
+            return 'O';
+    }
+}
+
+// Legacy function kept for backward compatibility
+function getCarrierBadgeClass(carrierType) {
+    switch(carrierType) {
+        case 'tmobile':
+            return 'bg-primary';
+        case 'att':
+            return 'bg-info';
+        case 'verizon':
+            return 'bg-danger';
+        default:
+            return 'bg-secondary';
+    }
+}
+%> 

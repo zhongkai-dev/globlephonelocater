@@ -1,0 +1,366 @@
+<%- include('partials/header') %>
+
+<div class="page-inner">
+    <div class="page-header">
+        <h4 class="page-title">Proxy Management</h4>
+    </div>
+    
+    <div class="alert alert-info">
+        <h5><i class="fas fa-info-circle"></i> How Proxies Work</h5>
+        <p>Proxies help bypass rate limits by distributing API requests across multiple IP addresses. The system will:</p>
+        <ul>
+            <li><strong>Rotate Proxies:</strong> Automatically switch between proxies when rate limits are encountered</li>
+            <li><strong>Support Authentication:</strong> Both unauthenticated and authenticated proxies are supported</li>
+            <li><strong>Test Connections:</strong> Use the test button to verify a proxy works with sent.dm API</li>
+        </ul>
+        <p class="mb-0"><strong>Note:</strong> After adding proxies, click the "Sync with Bot" button to update the active proxy rotation system.</p>
+    </div>
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex align-items-center">
+                        <h4 class="card-title">All Proxies</h4>
+                        <form action="/admin/proxies/sync" method="POST" class="ml-auto mr-2">
+                            <button type="submit" class="btn btn-info btn-round">
+                                <i class="fas fa-sync"></i>
+                                Sync with Bot
+                            </button>
+                        </form>
+                        <button class="btn btn-primary btn-round" data-toggle="modal" data-target="#addProxyModal">
+                            <i class="fa fa-plus"></i>
+                            Add Proxy
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <% if (message) { %>
+                        <div class="alert alert-<%= message.type %> alert-dismissible fade show" role="alert">
+                            <%= message.text %>
+                            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                    <% } %>
+
+                    <div class="table-responsive">
+                        <table id="proxies-table" class="display table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Host</th>
+                                    <th>Port</th>
+                                    <th>Auth</th>
+                                    <th>Status</th>
+                                    <th>Last Checked</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% proxies.forEach(proxy => { %>
+                                <tr data-id="<%= proxy._id %>">
+                                    <td><%= proxy.host %></td>
+                                    <td><%= proxy.port %></td>
+                                    <td>
+                                        <% if (proxy.username && proxy.password) { %>
+                                            <span class="badge badge-info">Yes</span>
+                                        <% } else { %>
+                                            <span class="badge badge-light">No</span>
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <% if (proxy.status === 'working') { %>
+                                            <span class="badge badge-success">Working</span>
+                                        <% } else if (proxy.status === 'failed') { %>
+                                            <span class="badge badge-danger" 
+                                                  data-toggle="tooltip" 
+                                                  data-placement="top" 
+                                                  title="<%= proxy.error_message || 'Error connecting to proxy' %>">
+                                                Failed
+                                            </span>
+                                        <% } else { %>
+                                            <span class="badge badge-warning">Unknown</span>
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <% if (proxy.last_checked) { %>
+                                            <%= new Date(proxy.last_checked).toLocaleString() %>
+                                        <% } else { %>
+                                            Never
+                                        <% } %>
+                                    </td>
+                                    <td>
+                                        <div class="form-button-action">
+                                            <button type="button" class="btn btn-link btn-primary test-proxy-btn" 
+                                                    data-id="<%= proxy._id %>" data-toggle="tooltip" title="Test Proxy">
+                                                <i class="fas fa-sync-alt"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-primary edit-proxy-btn" 
+                                                    data-id="<%= proxy._id %>" 
+                                                    data-host="<%= proxy.host %>"
+                                                    data-port="<%= proxy.port %>"
+                                                    data-username="<%= proxy.username || '' %>"
+                                                    data-password="<%= proxy.password || '' %>"
+                                                    data-toggle="tooltip" title="Edit">
+                                                <i class="fa fa-edit"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-link btn-danger delete-proxy-btn" 
+                                                    data-id="<%= proxy._id %>" data-toggle="tooltip" title="Delete">
+                                                <i class="fa fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <% }) %>
+                                <% if (proxies.length === 0) { %>
+                                <tr>
+                                    <td colspan="6" class="text-center">
+                                        <p>No proxies configured</p>
+                                        <div class="alert alert-info">
+                                            <h6>Recommended proxy providers:</h6>
+                                            <ul class="mb-0 mt-2">
+                                                <li><a href="https://www.brightdata.com/" target="_blank">Brightdata</a> - High quality residential and datacenter proxies</li>
+                                                <li><a href="https://proxyrack.com/" target="_blank">ProxyRack</a> - Affordable rotating proxies</li>
+                                                <li><a href="https://www.webshare.io/" target="_blank">Webshare</a> - Free plan available for testing</li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Proxy Modal -->
+<div class="modal fade" id="addProxyModal" tabindex="-1" role="dialog" aria-labelledby="addProxyModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form action="/admin/proxies/add" method="POST">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addProxyModalLabel">Add New Proxy</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="host">Host IP/Domain</label>
+                        <input type="text" class="form-control" id="host" name="host" required placeholder="e.g., 123.456.789.0 or proxy.example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="port">Port</label>
+                        <input type="number" class="form-control" id="port" name="port" required placeholder="e.g., 8080">
+                    </div>
+                    <div class="form-group">
+                        <label>Authentication (Optional)</label>
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" name="username" placeholder="Username">
+                            <div class="input-group-append">
+                                <span class="input-group-text">:</span>
+                            </div>
+                            <input type="password" class="form-control" name="password" placeholder="Password">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Add Proxy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Proxy Modal -->
+<div class="modal fade" id="editProxyModal" tabindex="-1" role="dialog" aria-labelledby="editProxyModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="editProxyForm" action="/admin/proxies/edit" method="POST">
+                <input type="hidden" name="id" id="edit-id">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editProxyModalLabel">Edit Proxy</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="edit-host">Host IP/Domain</label>
+                        <input type="text" class="form-control" id="edit-host" name="host" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit-port">Port</label>
+                        <input type="number" class="form-control" id="edit-port" name="port" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Authentication (Optional)</label>
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" id="edit-username" name="username" placeholder="Username">
+                            <div class="input-group-append">
+                                <span class="input-group-text">:</span>
+                            </div>
+                            <input type="password" class="form-control" id="edit-password" name="password" placeholder="Password">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteProxyModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form id="deleteProxyForm" action="/admin/proxies/delete" method="POST">
+                <input type="hidden" name="id" id="delete-id">
+                <div class="modal-header">
+                    <h5 class="modal-title">Delete Proxy</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to remove this proxy? This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Javascript for proxy management -->
+<script>
+$(document).ready(function() {
+    // Initialize DataTable
+    $('#proxies-table').DataTable({
+        "pagingType": "simple_numbers",
+        "order": [[0, 'asc']]
+    });
+    
+    // Initialize tooltips
+    $('[data-toggle="tooltip"]').tooltip();
+
+    // Handle edit proxy buttons
+    $('.edit-proxy-btn').click(function() {
+        const id = $(this).data('id');
+        const host = $(this).data('host');
+        const port = $(this).data('port');
+        const username = $(this).data('username');
+        const password = $(this).data('password');
+        
+        $('#edit-id').val(id);
+        $('#edit-host').val(host);
+        $('#edit-port').val(port);
+        $('#edit-username').val(username);
+        $('#edit-password').val(password);
+        
+        $('#editProxyModal').modal('show');
+    });
+    
+    // Handle delete proxy buttons
+    $('.delete-proxy-btn').click(function() {
+        const id = $(this).data('id');
+        $('#delete-id').val(id);
+        $('#deleteProxyModal').modal('show');
+    });
+    
+    // Handle test proxy buttons
+    $('.test-proxy-btn').click(function() {
+        const id = $(this).data('id');
+        const btn = $(this);
+        
+        // Change button to spinner
+        const originalContent = btn.html();
+        btn.html('<i class="fas fa-spinner fa-spin"></i>');
+        btn.prop('disabled', true);
+        
+        $.ajax({
+            url: '/admin/proxies/test',
+            method: 'POST',
+            data: { id: id },
+            success: function(response) {
+                if (response.success) {
+                    // Update status without page reload
+                    const statusCell = btn.closest('tr').find('td:eq(3)');
+                    const timeCell = btn.closest('tr').find('td:eq(4)');
+                    
+                    if (response.working) {
+                        statusCell.html('<span class="badge badge-success">Working</span>');
+                    } else {
+                        statusCell.html('<span class="badge badge-danger" data-toggle="tooltip" title="' + 
+                                        (response.error || 'Error connecting to proxy') + 
+                                        '">Failed</span>');
+                    }
+                    
+                    // Update last checked time
+                    timeCell.text(new Date().toLocaleString());
+                    
+                    // Show notification
+                    $.notify({
+                        icon: response.working ? 'fas fa-check' : 'fas fa-times',
+                        message: response.message
+                    }, {
+                        type: response.working ? 'success' : 'danger',
+                        placement: {
+                            from: "top",
+                            align: "center"
+                        },
+                        time: 1000
+                    });
+                } else {
+                    $.notify({
+                        icon: 'fas fa-exclamation-triangle',
+                        message: response.message || 'Failed to test proxy'
+                    }, {
+                        type: 'warning',
+                        placement: {
+                            from: "top",
+                            align: "center"
+                        },
+                        time: 1000
+                    });
+                }
+                
+                // Reset button state
+                btn.html(originalContent);
+                btn.prop('disabled', false);
+                
+                // Reinitialize tooltips after updating content
+                $('[data-toggle="tooltip"]').tooltip();
+            },
+            error: function() {
+                // Reset button state
+                btn.html(originalContent);
+                btn.prop('disabled', false);
+                
+                $.notify({
+                    icon: 'fas fa-exclamation-triangle',
+                    message: 'Error occurred while testing proxy'
+                }, {
+                    type: 'danger',
+                    placement: {
+                        from: "top",
+                        align: "center"
+                    },
+                    time: 1000
+                });
+            }
+        });
+    });
+});
+</script>
+
+<%- include('partials/footer') %> 

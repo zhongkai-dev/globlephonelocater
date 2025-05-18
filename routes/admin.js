@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./database/bot.db');
 const path = require('path');
 const ejs = require('ejs');
+const { User, Setting, LookupHistory, ApiKey, Proxy } = require('../models');
+const axios = require('axios');
 
 // Middleware to check if user is authenticated
 const isAuthenticated = (req, res, next) => {
@@ -46,46 +46,44 @@ router.get('/dashboard', isAuthenticated, async (req, res) => {
         // Get stats
         const stats = await getStats();
         
-        // Get recent lookups
-        const recentLookups = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT lh.*, u.username 
-                FROM lookup_history lh 
-                LEFT JOIN users u ON lh.user_id = u.telegram_id 
-                ORDER BY lh.created_at DESC LIMIT 10
-            `, [], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows || []);
-            });
-        });
+        // Get recent lookups - using raw query to avoid ObjectId conversion issues
+        const recentLookups = await LookupHistory.find()
+            .sort({ created_at: -1 })
+            .limit(10);
+            
+        // Manually get user information for each lookup
+        const enrichedLookups = await Promise.all(recentLookups.map(async (lookup) => {
+            const user = await User.findOne({ telegram_id: lookup.user_id });
+            return {
+                ...lookup.toObject(),
+                user: user ? { 
+                    username: user.username,
+                    first_name: user.first_name,
+                    last_name: user.last_name,
+                    telegram_id: user.telegram_id
+                } : null
+            };
+        }));
         
         // Get active API key
-        const apiKey = await new Promise((resolve, reject) => {
-            db.get('SELECT * FROM settings WHERE key = ?', ['veriphone_api_key'], (err, row) => {
-                if (err) reject(err);
-                resolve(row || { value: '', updated_at: new Date() });
-            });
-        });
+        const apiKey = await Setting.findOne({ key: 'veriphone_api_key' }) || 
+            { value: '', updated_at: new Date() };
         
         // Get bot status
-        const botStatus = await new Promise((resolve, reject) => {
-            db.get('SELECT value FROM settings WHERE key = ?', ['bot_status'], (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.value : 'active');
-            });
-        });
+        const botStatus = await Setting.findOne({ key: 'bot_status' });
+        const status = botStatus ? botStatus.value : 'active';
         
         res.render('admin/dashboard', {
             title: 'Dashboard',
             activePage: 'dashboard',
             stats,
-            recentLookups,
+            recentLookups: enrichedLookups,
             apiKey: apiKey.value,
-            botStatus
+            botStatus: status
         });
     } catch (error) {
         console.error('Error rendering dashboard:', error);
-        res.status(500).send('Error loading dashboard');
+        res.status(500).send('Error loading dashboard: ' + error.message);
     }
 });
 
@@ -94,49 +92,57 @@ router.get('/users', isAuthenticated, async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = 10;
-        const offset = (page - 1) * limit;
+        const skip = (page - 1) * limit;
         const search = req.query.q || '';
         
-        // Get total users count
-        const totalCount = await new Promise((resolve, reject) => {
-            let query = 'SELECT COUNT(*) as count FROM users';
-            let params = [];
-            
-            if (search) {
-                query += ' WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR telegram_id LIKE ?';
-                const searchParam = `%${search}%`;
-                params = [searchParam, searchParam, searchParam, searchParam];
-            }
-            
-            db.get(query, params, (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
+        // Create search query
+        const searchQuery = search ? {
+            $or: [
+                { username: { $regex: search, $options: 'i' } },
+                { first_name: { $regex: search, $options: 'i' } },
+                { last_name: { $regex: search, $options: 'i' } },
+                { telegram_id: { $regex: search, $options: 'i' } }
+            ]
+        } : {};
         
-        // Get users with lookup count
-        const users = await new Promise((resolve, reject) => {
-            let query = `
-                SELECT u.*, COUNT(lh.id) as lookup_count 
-                FROM users u 
-                LEFT JOIN lookup_history lh ON u.telegram_id = lh.user_id
-            `;
-            
-            let params = [];
-            if (search) {
-                query += ' WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR telegram_id LIKE ?';
-                const searchParam = `%${search}%`;
-                params = [searchParam, searchParam, searchParam, searchParam];
-            }
-            
-            query += ' GROUP BY u.telegram_id ORDER BY u.created_at DESC LIMIT ? OFFSET ?';
-            params.push(limit, offset);
-            
-            db.all(query, params, (err, rows) => {
-                if (err) reject(err);
-                resolve(rows || []);
-            });
-        });
+        // Get total users count
+        const totalCount = await User.countDocuments(searchQuery);
+        
+        // Get users with aggregation to count their lookups
+        const users = await User.aggregate([
+            { $match: searchQuery },
+            {
+                $lookup: {
+                    from: 'lookuphistories',
+                    let: { telegram_id: '$telegram_id' },
+                    pipeline: [
+                        { 
+                            $match: {
+                                $expr: { $eq: ['$user_id', '$$telegram_id'] }
+                            }
+                        }
+                    ],
+                    as: 'lookups'
+                }
+            },
+            {
+                $addFields: {
+                    lookup_count: { $size: '$lookups' }
+                }
+            },
+            {
+                $project: {
+                    lookups: 0
+                }
+            },
+            { $sort: { created_at: -1 } },
+            { $skip: skip },
+            { $limit: limit }
+        ]);
+        
+        // Get default daily limit from settings
+        const defaultLimitSetting = await Setting.findOne({ key: 'default_daily_limit' });
+        const defaultLimit = defaultLimitSetting ? parseInt(defaultLimitSetting.value) : 1000;
         
         const totalPages = Math.ceil(totalCount / limit);
         
@@ -149,11 +155,18 @@ router.get('/users', isAuthenticated, async (req, res) => {
                 totalPages,
                 totalCount
             },
-            search
+            search,
+            defaultLimit,
+            error: req.session.error,
+            success: req.session.success
         });
+        
+        // Clear session messages after sending to template
+        req.session.error = null;
+        req.session.success = null;
     } catch (error) {
         console.error('Error rendering users page:', error);
-        res.status(500).send('Error loading users');
+        res.status(500).send('Error loading users: ' + error.message);
     }
 });
 
@@ -163,51 +176,72 @@ router.get('/users/:id', isAuthenticated, async (req, res) => {
         const userId = req.params.id;
         
         // Get user
-        const user = await new Promise((resolve, reject) => {
-            db.get('SELECT * FROM users WHERE telegram_id = ?', [userId], (err, row) => {
-                if (err) reject(err);
-                if (!row) reject(new Error('User not found'));
-                resolve(row);
-            });
-        });
+        const user = await User.findOne({ telegram_id: userId });
+        if (!user) {
+            throw new Error('User not found');
+        }
         
         // Get user stats
-        const stats = await new Promise((resolve, reject) => {
-            db.get(`
-                SELECT 
-                    COUNT(*) as totalLookups,
-                    SUM(CASE WHEN is_valid = 1 THEN 1 ELSE 0 END) as validLookups,
-                    SUM(CASE WHEN is_valid = 0 THEN 1 ELSE 0 END) as invalidLookups
-                FROM lookup_history 
-                WHERE user_id = ?
-            `, [userId], (err, row) => {
-                if (err) reject(err);
-                resolve(row || { totalLookups: 0, validLookups: 0, invalidLookups: 0 });
-            });
-        });
+        const stats = await LookupHistory.aggregate([
+            { $match: { user_id: userId } },
+            {
+                $group: {
+                    _id: null,
+                    totalLookups: { $sum: 1 },
+                    validLookups: { $sum: { $cond: [{ $eq: ['$is_valid', 1] }, 1, 0] } },
+                    invalidLookups: { $sum: { $cond: [{ $eq: ['$is_valid', 0] }, 1, 0] } }
+                }
+            }
+        ]);
         
-        // Get recent lookup history
-        const lookupHistory = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT * FROM lookup_history 
-                WHERE user_id = ? 
-                ORDER BY created_at DESC LIMIT 10
-            `, [userId], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows || []);
-            });
-        });
+        const userStats = stats.length > 0 ? stats[0] : { 
+            totalLookups: 0, 
+            validLookups: 0, 
+            invalidLookups: 0 
+        };
+        
+        // Get recent lookup history using string comparison for user_id
+        const lookupHistory = await LookupHistory.find({ user_id: userId.toString() })
+            .sort({ created_at: -1 })
+            .limit(10);
         
         res.render('admin/user-detail', {
-            title: 'User Details',
+            title: `User: ${user.username || user.first_name || user.telegram_id}`,
             activePage: 'users',
             user,
-            stats,
+            stats: userStats,
             lookupHistory
         });
     } catch (error) {
-        console.error('Error rendering user details:', error);
-        res.status(500).send('Error loading user details');
+        console.error('Error rendering user detail page:', error);
+        res.status(500).send('Error loading user details: ' + error.message);
+    }
+});
+
+// Block/unblock user
+router.post('/users/:id/toggle-block', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.params.id;
+        
+        // Get current block status
+        const user = await User.findOne({ telegram_id: userId });
+        if (!user) {
+            throw new Error('User not found');
+        }
+        
+        // Toggle block status
+        const newStatus = user.is_blocked === 1 ? 0 : 1;
+        
+        // Update user
+        await User.updateOne(
+            { telegram_id: userId },
+            { $set: { is_blocked: newStatus } }
+        );
+        
+        res.redirect(`/admin/users/${userId}`);
+    } catch (error) {
+        console.error('Error toggling user block status:', error);
+        res.status(500).send('Error updating user');
     }
 });
 
@@ -217,28 +251,22 @@ router.post('/users/:id/update-limit', isAuthenticated, async (req, res) => {
         const userId = req.params.id;
         const { check_limit } = req.body;
         
-        // Validate
+        // Convert to number
         const limit = parseInt(check_limit);
-        if (isNaN(limit) || limit < 0) {
-            return res.status(400).send('Invalid check limit value');
+        if (isNaN(limit) || limit < 1) {
+            throw new Error('Invalid limit value');
         }
         
-        // Update user check limit
-        await new Promise((resolve, reject) => {
-            db.run('UPDATE users SET check_limit = ? WHERE telegram_id = ?', [limit, userId], function(err) {
-                if (err) {
-                    console.error('Error updating user check limit:', err);
-                    reject(err);
-                }
-                resolve(this.changes);
-            });
-        });
+        // Update user
+        await User.updateOne(
+            { telegram_id: userId },
+            { $set: { check_limit: limit } }
+        );
         
-        // Redirect back to user detail page
         res.redirect(`/admin/users/${userId}`);
     } catch (error) {
         console.error('Error updating user check limit:', error);
-        res.status(500).send('Error updating user check limit');
+        res.status(500).send('Error updating user limit');
     }
 });
 
@@ -248,181 +276,252 @@ router.post('/users/:id/reset-checks', isAuthenticated, async (req, res) => {
         const userId = req.params.id;
         
         // Reset daily checks
-        await new Promise((resolve, reject) => {
-            db.run('UPDATE users SET daily_checks = 0, last_check_date = NULL WHERE telegram_id = ?', [userId], function(err) {
-                if (err) {
-                    console.error('Error resetting daily checks:', err);
-                    reject(err);
-                }
-                resolve(this.changes);
-            });
-        });
+        await User.updateOne(
+            { telegram_id: userId },
+            { $set: { daily_checks: 0 } }
+        );
         
-        // Redirect back to user detail page
         res.redirect(`/admin/users/${userId}`);
     } catch (error) {
-        console.error('Error resetting daily checks:', error);
-        res.status(500).send('Error resetting daily checks');
+        console.error('Error resetting user daily checks:', error);
+        res.status(500).send('Error resetting user checks');
+    }
+});
+
+// Update default daily limit for all users
+router.post('/users/update-default-limit', isAuthenticated, async (req, res) => {
+    try {
+        const { default_limit } = req.body;
+        
+        // Validate limit
+        const newLimit = parseInt(default_limit);
+        if (isNaN(newLimit) || newLimit < 1) {
+            req.session.error = 'Invalid limit value';
+            return res.redirect('/admin/users');
+        }
+        
+        // Update all users with new limit
+        await User.updateMany(
+            {}, // Match all users
+            { $set: { check_limit: newLimit } }
+        );
+        
+        // Save the default limit to settings
+        await Setting.updateOne(
+            { key: 'default_daily_limit' },
+            { $set: { value: newLimit.toString(), updated_at: new Date() } },
+            { upsert: true }
+        );
+        
+        // Set success message
+        req.session.success = `Successfully updated all users to have a daily limit of ${newLimit} checks`;
+        
+        res.redirect('/admin/users');
+    } catch (error) {
+        console.error('Error updating default daily limit:', error);
+        req.session.error = 'Error updating default daily limit: ' + error.message;
+        res.redirect('/admin/users');
+    }
+});
+
+// Toggle user block status
+router.post('/toggle-user/:id', isAuthenticated, async (req, res) => {
+    try {
+        const userId = req.params.id;
+        
+        // Get current block status
+        const user = await User.findOne({ telegram_id: userId });
+        if (!user) {
+            throw new Error('User not found');
+        }
+        
+        // Toggle block status
+        const newStatus = user.is_blocked === 1 ? 0 : 1;
+        
+        // Update user
+        await User.updateOne(
+            { telegram_id: userId },
+            { $set: { is_blocked: newStatus } }
+        );
+        
+        // Redirect back to the user list or user detail page depending on referer
+        const referer = req.headers.referer || '/admin/users';
+        res.redirect(referer);
+    } catch (error) {
+        console.error('Error toggling user block status:', error);
+        res.status(500).send('Error updating user');
     }
 });
 
 // API Keys management
 router.get('/api-keys', isAuthenticated, async (req, res) => {
     try {
-        // Get flash messages from session and clear them
-        const flashError = req.session.flashError;
-        const flashSuccess = req.session.flashSuccess;
-        const flashInfo = req.session.flashInfo;
-        
-        // Clear flash messages
-        delete req.session.flashError;
-        delete req.session.flashSuccess;
-        delete req.session.flashInfo;
-        
-        // Get active API key
-        const activeApiKey = await new Promise((resolve, reject) => {
-            db.get('SELECT * FROM settings WHERE key = ?', ['veriphone_api_key'], (err, row) => {
-                if (err) reject(err);
-                resolve(row || { value: '', updated_at: new Date() });
-            });
-        });
-        
-        // Make sure the api_keys table exists
-        await new Promise((resolve, reject) => {
-            db.run(`
-                CREATE TABLE IF NOT EXISTS api_keys (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    value TEXT UNIQUE,
-                    is_active INTEGER DEFAULT 0,
-                    usage_count INTEGER DEFAULT 0,
-                    last_used DATETIME,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            `, (err) => {
-                if (err) reject(err);
-                resolve();
-            });
-        });
-        
         // Get all API keys
-        const apiKeys = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT * FROM api_keys 
-                ORDER BY usage_count DESC, created_at DESC
-            `, [], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows || []);
-            });
+        const apiKeys = await ApiKey.find().sort({ created_at: -1 });
+        
+        // Ensure each API key has the required fields to prevent rendering errors
+        const processedApiKeys = apiKeys.map(key => {
+            return {
+                _id: key._id,
+                value: key.value || '',
+                is_active: key.is_active || 0,
+                usage_count: key.usage_count || 0,
+                last_used: key.last_used || new Date(),
+                created_at: key.created_at || new Date()
+            };
         });
         
-        // Add the active API key if it's not in the list
-        let activeKeyExists = false;
-        for (const key of apiKeys) {
-            if (key.value === activeApiKey.value) {
-                activeKeyExists = true;
-                break;
-            }
-        }
-        
-        if (!activeKeyExists && activeApiKey.value) {
-            apiKeys.unshift({
-                id: 0,
-                value: activeApiKey.value,
-                created_at: activeApiKey.updated_at,
-                usage_count: 0,
-                is_active: 1
-            });
-        }
+        // Get active API key from settings
+        const apiKey = await Setting.findOne({ key: 'veriphone_api_key' }) || 
+            { value: '', updated_at: new Date() };
         
         res.render('admin/api-keys', {
-            title: 'API Key Management',
+            title: 'API Keys Management',
             activePage: 'api-keys',
-            activeApiKey,
-            apiKeys,
-            flashError,
-            flashSuccess,
-            flashInfo
+            apiKeys: processedApiKeys,
+            apiKey: apiKey.value,
+            error: req.session.error,
+            success: req.session.success
         });
+        
+        // Clear session messages
+        req.session.error = null;
+        req.session.success = null;
     } catch (error) {
         console.error('Error rendering API keys page:', error);
         res.status(500).send('Error loading API keys: ' + error.message);
     }
 });
 
+// Helper function to safely use flash
+function safeFlash(req, type, message) {
+    if (req.flash) {
+        return req.flash(type, message);
+    } else if (req.session) {
+        // Simple fallback implementation
+        if (!req.session.flash) req.session.flash = {};
+        if (!req.session.flash[type]) req.session.flash[type] = [];
+        if (message) req.session.flash[type].push(message);
+        return req.session.flash[type] || [];
+    }
+    // If no session either, just log to console
+    console.log(`Flash message (${type}):`, message);
+    return [];
+}
+
 // Add API key
-router.post('/add-api-key', isAuthenticated, async (req, res) => {
+router.post('/api-keys/add', isAuthenticated, async (req, res) => {
     try {
-        const { apiKey, setAsActive } = req.body;
+        const { api_key } = req.body;
         
-        // Validate API key length
-        if (!apiKey || apiKey.length < 30) {
-            req.session.flashError = 'API key must be at least 30 characters long';
-            return res.redirect('/admin/api-keys');
-        }
-        
-        // Check if api_keys table exists
-        await new Promise((resolve, reject) => {
-            db.run(`
-                CREATE TABLE IF NOT EXISTS api_keys (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    value TEXT UNIQUE,
-                    is_active INTEGER DEFAULT 0,
-                    usage_count INTEGER DEFAULT 0,
-                    last_used DATETIME,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            `, (err) => {
-                if (err) reject(err);
-                resolve();
-            });
-        });
-        
-        // Insert new API key
-        await new Promise((resolve, reject) => {
-            db.run('INSERT INTO api_keys (value) VALUES (?)', [apiKey], (err) => {
-                if (err && err.message.includes('UNIQUE constraint failed')) {
-                    // Key already exists, that's fine
-                    req.session.flashInfo = 'API key already exists in the database';
-                    resolve();
-                } else if (err) {
-                    reject(err);
-                } else {
-                    req.session.flashSuccess = 'API key added successfully';
-                    resolve();
-                }
-            });
-        });
-        
-        // Set as active if requested
-        if (setAsActive) {
-            await new Promise((resolve, reject) => {
-                db.run('UPDATE settings SET value = ? WHERE key = ?', [apiKey, 'veriphone_api_key'], (err) => {
-                    if (err) reject(err);
-                    resolve();
-                });
-            });
+        // Check if key already exists
+        const existingKey = await ApiKey.findOne({ value: api_key });
+        if (existingKey) {
+            req.session.error = 'API key already exists';
+        } else {
+            // Add key
+            await ApiKey.create({ value: api_key });
+            req.session.success = 'API key added';
         }
         
         res.redirect('/admin/api-keys');
     } catch (error) {
         console.error('Error adding API key:', error);
-        req.session.flashError = 'Error adding API key: ' + error.message;
+        req.session.error = 'Error adding API key';
+        res.redirect('/admin/api-keys');
+    }
+});
+
+// Toggle API key status
+router.post('/api-keys/:id/toggle', isAuthenticated, async (req, res) => {
+    try {
+        const keyId = req.params.id;
+        
+        // Get current status
+        const apiKey = await ApiKey.findById(keyId);
+        if (!apiKey) {
+            throw new Error('API key not found');
+        }
+        
+        // Toggle status
+        const newStatus = apiKey.is_active === 1 ? 0 : 1;
+        
+        // Update key
+        await ApiKey.updateOne(
+            { _id: keyId },
+            { $set: { is_active: newStatus } }
+        );
+        
+        res.redirect('/admin/api-keys');
+    } catch (error) {
+        console.error('Error toggling API key status:', error);
+        res.status(500).send('Error updating API key: ' + error.message);
+    }
+});
+
+// Activate all API keys
+router.post('/api-keys/activate-all', isAuthenticated, async (req, res) => {
+    try {
+        // Update all keys to active
+        await ApiKey.updateMany({}, { $set: { is_active: 1 } });
+        
+        req.session.success = 'All API keys activated';
+        res.redirect('/admin/api-keys');
+    } catch (error) {
+        console.error('Error activating all API keys:', error);
+        req.session.error = 'Error activating API keys';
+        res.redirect('/admin/api-keys');
+    }
+});
+
+// Deactivate all API keys
+router.post('/api-keys/deactivate-all', isAuthenticated, async (req, res) => {
+    try {
+        // Update all keys to inactive
+        await ApiKey.updateMany({}, { $set: { is_active: 0 } });
+        
+        req.session.success = 'All API keys deactivated';
+        res.redirect('/admin/api-keys');
+    } catch (error) {
+        console.error('Error deactivating all API keys:', error);
+        req.session.error = 'Error deactivating API keys';
+        res.redirect('/admin/api-keys');
+    }
+});
+
+// Update primary API key
+router.post('/update-api-key', isAuthenticated, async (req, res) => {
+    try {
+        const { apiKey } = req.body;
+        
+        if (!apiKey) {
+            req.session.error = 'API key cannot be empty';
+            return res.redirect('/admin/api-keys');
+        }
+        
+        // Update the primary API key in settings
+        await Setting.updateOne(
+            { key: 'veriphone_api_key' },
+            { $set: { value: apiKey, updated_at: new Date() } },
+            { upsert: true }
+        );
+        
+        req.session.success = 'Primary API key updated';
+        res.redirect('/admin/api-keys');
+    } catch (error) {
+        console.error('Error updating primary API key:', error);
+        req.session.error = 'Error updating primary API key';
         res.redirect('/admin/api-keys');
     }
 });
 
 // Delete API key
-router.post('/delete-api-key/:id', isAuthenticated, async (req, res) => {
+router.post('/api-keys/:id/delete', isAuthenticated, async (req, res) => {
     try {
-        const id = req.params.id;
+        const keyId = req.params.id;
         
-        // Delete the API key
-        await new Promise((resolve, reject) => {
-            db.run('DELETE FROM api_keys WHERE id = ?', [id], (err) => {
-                if (err) reject(err);
-                resolve();
-            });
-        });
+        // Delete key
+        await ApiKey.deleteOne({ _id: keyId });
         
         res.redirect('/admin/api-keys');
     } catch (error) {
@@ -431,217 +530,134 @@ router.post('/delete-api-key/:id', isAuthenticated, async (req, res) => {
     }
 });
 
-// Update API key
-router.post('/update-api-key', isAuthenticated, async (req, res) => {
+// Settings page
+router.get('/settings', isAuthenticated, async (req, res) => {
     try {
-        const { apiKey } = req.body;
+        // Get all settings
+        const settings = await Setting.find();
         
-        // Update the active API key
-        await new Promise((resolve, reject) => {
-            db.run('UPDATE settings SET value = ? WHERE key = ?', [apiKey, 'veriphone_api_key'], (err) => {
-                if (err) reject(err);
-                resolve();
-            });
+        // Convert to key-value map
+        const settingsMap = {};
+        settings.forEach(setting => {
+            settingsMap[setting.key] = setting.value;
         });
         
-        res.redirect('/admin/api-keys');
+        res.render('admin/settings', {
+            title: 'Settings',
+            activePage: 'settings',
+            settings: settingsMap
+        });
     } catch (error) {
-        console.error('Error updating API key:', error);
-        res.status(500).send('Error updating API key');
+        console.error('Error rendering settings page:', error);
+        res.status(500).send('Error loading settings');
     }
 });
 
-// History page
-router.get('/history', isAuthenticated, async (req, res) => {
+// Update settings
+router.post('/settings/update', isAuthenticated, async (req, res) => {
     try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = 20;
-        const offset = (page - 1) * limit;
+        const { veriphone_api_key, bot_status } = req.body;
         
-        // Get filters
-        const user = req.query.user || null;
-        const from = req.query.from || null;
-        const to = req.query.to || null;
-        const carrier_type = req.query.carrier_type || null;
+        // Update settings
+        await Setting.updateOne(
+            { key: 'veriphone_api_key' },
+            { $set: { value: veriphone_api_key } },
+            { upsert: true }
+        );
         
-        let query = `
-            SELECT lh.*, u.username 
-            FROM lookup_history lh 
-            LEFT JOIN users u ON lh.user_id = u.telegram_id 
-            WHERE 1=1
-        `;
+        await Setting.updateOne(
+            { key: 'bot_status' },
+            { $set: { value: bot_status } },
+            { upsert: true }
+        );
         
-        let countQuery = `
-            SELECT COUNT(*) as count 
-            FROM lookup_history lh 
-            WHERE 1=1
-        `;
+        req.session.success = 'Settings updated successfully';
+        res.redirect('/admin/settings');
+    } catch (error) {
+        console.error('Error updating settings:', error);
+        req.session.error = 'Error updating settings';
+        res.redirect('/admin/settings');
+    }
+});
+
+// Statistics page
+router.get('/statistics', isAuthenticated, async (req, res) => {
+    try {
+        // Get overall stats
+        const stats = await getStats();
         
-        let params = [];
-        let countParams = [];
-        let queryString = '';
+        // Get daily stats for past 7 days
+        const dateLabels = [];
+        const dateData = {
+            total: [],
+            valid: [],
+            invalid: []
+        };
         
-        if (user) {
-            query += ' AND lh.user_id = ?';
-            countQuery += ' AND user_id = ?';
-            params.push(user);
-            countParams.push(user);
-            queryString += `&user=${user}`;
-        }
-        
-        if (from) {
-            query += ' AND DATE(lh.created_at) >= DATE(?)';
-            countQuery += ' AND DATE(created_at) >= DATE(?)';
-            params.push(from);
-            countParams.push(from);
-            queryString += `&from=${from}`;
-        }
-        
-        if (to) {
-            query += ' AND DATE(lh.created_at) <= DATE(?)';
-            countQuery += ' AND DATE(created_at) <= DATE(?)';
-            params.push(to);
-            countParams.push(to);
-            queryString += `&to=${to}`;
-        }
-        
-        if (carrier_type) {
-            query += ' AND lh.carrier_type = ?';
-            countQuery += ' AND carrier_type = ?';
-            params.push(carrier_type);
-            countParams.push(carrier_type);
-            queryString += `&carrier_type=${carrier_type}`;
-        }
-        
-        query += ' ORDER BY lh.created_at DESC LIMIT ? OFFSET ?';
-        params.push(limit, offset);
-        
-        // Get history count
-        const totalCount = await new Promise((resolve, reject) => {
-            db.get(countQuery, countParams, (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
-        
-        // Get history
-        const history = await new Promise((resolve, reject) => {
-            db.all(query, params, (err, rows) => {
-                if (err) {
-                    // If table doesn't exist yet, return empty array
-                    if (err.message.includes('no such table')) {
-                        return resolve([]);
+        for (let i = 6; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            const dateString = date.toISOString().split('T')[0];
+            dateLabels.push(dateString);
+            
+            // Format for MongoDB date query
+            const startOfDay = new Date(dateString);
+            const endOfDay = new Date(dateString);
+            endOfDay.setHours(23, 59, 59, 999);
+            
+            const dayStats = await LookupHistory.aggregate([
+                {
+                    $match: {
+                        created_at: {
+                            $gte: startOfDay,
+                            $lte: endOfDay
+                        }
                     }
-                    reject(err);
+                },
+                {
+                    $group: {
+                        _id: null,
+                        total: { $sum: 1 },
+                        valid: { $sum: { $cond: [{ $eq: ['$is_valid', 1] }, 1, 0] } },
+                        invalid: { $sum: { $cond: [{ $eq: ['$is_valid', 0] }, 1, 0] } }
+                    }
                 }
-                resolve(rows || []);
-            });
-        });
+            ]);
+            
+            const dayStat = dayStats.length > 0 ? dayStats[0] : { total: 0, valid: 0, invalid: 0 };
+            dateData.total.push(dayStat.total);
+            dateData.valid.push(dayStat.valid);
+            dateData.invalid.push(dayStat.invalid);
+        }
         
-        const totalPages = Math.ceil(totalCount / limit);
-        
-        res.render('admin/history', {
-            title: 'Lookup History',
-            activePage: 'history',
-            history,
-            pagination: {
-                currentPage: page,
-                totalPages,
-                totalCount
+        // Get carrier stats
+        const carrierStats = await LookupHistory.aggregate([
+            { $match: { carrier_type: { $ne: null } } },
+            {
+                $group: {
+                    _id: '$carrier_type',
+                    count: { $sum: 1 }
+                }
             },
-            filters: {
-                user,
-                from: from || '',
-                to: to || '',
-                carrier_type,
-                queryString
-            }
+            { $sort: { count: -1 } }
+        ]);
+        
+        // Format carrier data for chart
+        const carrierLabels = carrierStats.map(item => item._id || 'unknown');
+        const carrierData = carrierStats.map(item => item.count);
+        
+        res.render('admin/statistics', {
+            title: 'Statistics',
+            activePage: 'statistics',
+            stats,
+            dateLabels: JSON.stringify(dateLabels),
+            dateData: JSON.stringify(dateData),
+            carrierLabels: JSON.stringify(carrierLabels),
+            carrierData: JSON.stringify(carrierData)
         });
     } catch (error) {
-        console.error('Error rendering history page:', error);
-        res.status(500).send('Error loading history');
-    }
-});
-
-// Toggle user block status
-router.post('/toggle-user/:telegramId', isAuthenticated, async (req, res) => {
-    const { telegramId } = req.params;
-    
-    try {
-        // First get current status
-        const user = await new Promise((resolve, reject) => {
-            db.get('SELECT is_blocked FROM users WHERE telegram_id = ?', [telegramId], (err, row) => {
-                if (err) reject(err);
-                resolve(row);
-            });
-        });
-
-        if (!user) {
-            console.error(`User ${telegramId} not found`);
-            return res.status(404).send('User not found');
-        }
-
-        const newBlockedStatus = user.is_blocked === 0 ? 1 : 0;
-        console.log(`Toggling user ${telegramId} blocked status from ${user.is_blocked} to ${newBlockedStatus}`);
-
-        // Update the blocked status
-        await new Promise((resolve, reject) => {
-            db.run(
-                'UPDATE users SET is_blocked = ? WHERE telegram_id = ?',
-                [newBlockedStatus, telegramId],
-                (err) => {
-                    if (err) reject(err);
-                    resolve();
-                }
-            );
-        });
-
-        console.log(`Successfully updated user ${telegramId} blocked status to ${newBlockedStatus}`);
-        
-        // Redirect back to referrer or users page
-        const referrer = req.get('Referrer');
-        if (referrer && referrer.includes('/admin/users/')) {
-            res.redirect(`/admin/users/${telegramId}`);
-        } else {
-            res.redirect('/admin/users');
-        }
-    } catch (error) {
-        console.error('Error in toggle-user:', error);
-        res.status(500).send('Database error');
-    }
-});
-
-// Export history to CSV
-router.get('/history/export', isAuthenticated, async (req, res) => {
-    try {
-        // Get all history
-        const history = await new Promise((resolve, reject) => {
-            db.all(`
-                SELECT lh.*, u.username 
-                FROM lookup_history lh 
-                LEFT JOIN users u ON lh.user_id = u.telegram_id 
-                ORDER BY lh.created_at DESC
-            `, [], (err, rows) => {
-                if (err) reject(err);
-                resolve(rows || []);
-            });
-        });
-        
-        // Create CSV data
-        let csv = 'ID,User ID,Username,Phone Number,Country,Region,Carrier,Carrier Type,Valid,Date\n';
-        
-        history.forEach(entry => {
-            csv += `${entry.id},${entry.user_id},"${entry.username || ''}","${entry.phone_number}","${entry.country || ''}","${entry.region || ''}","${entry.carrier || ''}","${entry.carrier_type || ''}",${entry.is_valid ? 'Yes' : 'No'},"${new Date(entry.created_at).toLocaleString()}"\n`;
-        });
-        
-        // Set headers for file download
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename=lookup_history_${new Date().toISOString().slice(0, 10)}.csv`);
-        
-        res.send(csv);
-    } catch (error) {
-        console.error('Error exporting history:', error);
-        res.status(500).send('Error exporting history');
+        console.error('Error rendering statistics page:', error);
+        res.status(500).send('Error loading statistics');
     }
 });
 
@@ -651,221 +667,415 @@ router.get('/logout', (req, res) => {
     res.redirect('/admin/login');
 });
 
+// Get stats for dashboard
+async function getStats() {
+    try {
+        // Total users
+        const totalUsers = await User.countDocuments();
+        
+        // Total lookups
+        const totalLookups = await LookupHistory.countDocuments();
+        
+        // Total valid lookups
+        const validLookups = await LookupHistory.countDocuments({ is_valid: 1 });
+        
+        // Total invalid lookups
+        const invalidLookups = await LookupHistory.countDocuments({ is_valid: 0 });
+        
+        // Today's lookups
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayLookups = await LookupHistory.countDocuments({
+            created_at: { $gte: today }
+        });
+        
+        // Users who reached daily limit today
+        const todayString = today.toISOString().split('T')[0];
+        const limitReachedUsers = await User.countDocuments({
+            last_check_date: todayString,
+            $expr: { $gte: ['$daily_checks', '$check_limit'] }
+        });
+        
+        // Active users today
+        const activeUsers = await LookupHistory.aggregate([
+            { $match: { created_at: { $gte: today } } },
+            { $group: { _id: '$user_id' } },
+            { $count: 'count' }
+        ]);
+        
+        const activeUserCount = activeUsers.length > 0 ? activeUsers[0].count : 0;
+        
+        // Get carrier statistics
+        const carrierStats = await LookupHistory.aggregate([
+            {
+                $group: {
+                    _id: '$carrier_type',
+                    count: { $sum: 1 }
+                }
+            }
+        ]);
+        
+        // Extract stats for each carrier type
+        const tmobileCount = carrierStats.find(item => item._id === 'tmobile')?.count || 0;
+        const attCount = carrierStats.find(item => item._id === 'att')?.count || 0;
+        const verizonCount = carrierStats.find(item => item._id === 'verizon')?.count || 0;
+        const otherCount = carrierStats.find(item => item._id === 'other')?.count || 0;
+        
+        return {
+            totalUsers,
+            totalLookups,
+            validLookups,
+            invalidLookups,
+            todayLookups,
+            limitReachedUsers,
+            activeUsers: activeUserCount,
+            // Add carrier statistics to the returned object
+            carrierStats: {
+                tmobileCount,
+                attCount,
+                verizonCount,
+                otherCount
+            }
+        };
+    } catch (error) {
+        console.error('Error getting stats:', error);
+        return {
+            totalUsers: 0,
+            totalLookups: 0,
+            validLookups: 0,
+            invalidLookups: 0,
+            todayLookups: 0,
+            limitReachedUsers: 0,
+            activeUsers: 0,
+            // Provide default carrier stats to prevent errors
+            carrierStats: {
+                tmobileCount: 0,
+                attCount: 0,
+                verizonCount: 0,
+                otherCount: 0
+            }
+        };
+    }
+}
+
+// Helper function to render a view as a string
+async function renderView(viewPath, data = {}) {
+    try {
+        const fullPath = path.join(__dirname, '../views', viewPath);
+        return new Promise((resolve, reject) => {
+            ejs.renderFile(fullPath, data, (err, result) => {
+                if (err) reject(err);
+                resolve(result);
+            });
+        });
+    } catch (error) {
+        console.error('Error rendering view:', error);
+        return '';
+    }
+}
+
+// Add History page
+router.get('/history', isAuthenticated, async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = 20;
+        const skip = (page - 1) * limit;
+        
+        // Get total count for pagination
+        const totalCount = await LookupHistory.countDocuments();
+        
+        // Get lookup history with user information
+        const lookupHistory = await LookupHistory.find()
+            .sort({ created_at: -1 })
+            .skip(skip)
+            .limit(limit);
+            
+        // Manually get user information for each lookup
+        const enrichedHistory = await Promise.all(lookupHistory.map(async (lookup) => {
+            const user = await User.findOne({ telegram_id: lookup.user_id });
+            return {
+                ...lookup.toObject(),
+                user: user ? { 
+                    username: user.username,
+                    first_name: user.first_name,
+                    last_name: user.last_name,
+                    telegram_id: user.telegram_id
+                } : { 
+                    username: 'Unknown',
+                    telegram_id: lookup.user_id 
+                }
+            };
+        }));
+        
+        const totalPages = Math.ceil(totalCount / limit);
+        
+        res.render('admin/history', {
+            title: 'Lookup History',
+            activePage: 'history',
+            history: enrichedHistory,
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalCount
+            }
+        });
+    } catch (error) {
+        console.error('Error rendering history page:', error);
+        res.status(500).send('Error loading lookup history: ' + error.message);
+    }
+});
+
 // Bot control routes
 router.post('/bot/start', isAuthenticated, async (req, res) => {
     try {
-        await new Promise((resolve, reject) => {
-            db.run('UPDATE settings SET value = ? WHERE key = ?', ['active', 'bot_status'], (err) => {
-                if (err) reject(err);
-                resolve();
-            });
-        });
-        console.log('Bot set to active by admin');
+        await Setting.updateOne(
+            { key: 'bot_status' },
+            { $set: { value: 'active' } },
+            { upsert: true }
+        );
+        
+        req.session.success = 'Bot has been started';
         res.redirect('/admin/dashboard');
     } catch (error) {
         console.error('Error starting bot:', error);
-        res.status(500).send('Error starting bot');
+        req.session.error = 'Error starting bot: ' + error.message;
+        res.redirect('/admin/dashboard');
     }
 });
 
 router.post('/bot/stop', isAuthenticated, async (req, res) => {
     try {
-        await new Promise((resolve, reject) => {
-            db.run('UPDATE settings SET value = ? WHERE key = ?', ['inactive', 'bot_status'], (err) => {
-                if (err) reject(err);
-                resolve();
-            });
-        });
-        console.log('Bot set to inactive by admin');
+        await Setting.updateOne(
+            { key: 'bot_status' },
+            { $set: { value: 'inactive' } },
+            { upsert: true }
+        );
+        
+        req.session.success = 'Bot has been stopped';
         res.redirect('/admin/dashboard');
     } catch (error) {
         console.error('Error stopping bot:', error);
-        res.status(500).send('Error stopping bot');
+        req.session.error = 'Error stopping bot: ' + error.message;
+        res.redirect('/admin/dashboard');
     }
 });
 
-// Helper function to get dashboard stats
-async function getStats() {
+// Proxy management routes
+router.get('/proxies', isAuthenticated, async (req, res) => {
     try {
-        // Get user count
-        const userCount = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM users', [], (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
+        const proxies = await Proxy.find().sort({ host: 1 });
         
-        // Get blocked user count
-        const blockedUserCount = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM users WHERE is_blocked = 1', [], (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
-        
-        // Get lookup count
-        const lookupCount = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM lookup_history', [], (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
-        
-        // Get valid lookup count
-        const validLookupCount = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM lookup_history WHERE is_valid = 1', [], (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
-        
-        // Get invalid lookup count
-        const invalidLookupCount = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM lookup_history WHERE is_valid = 0', [], (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
-        
-        // Get API key count
-        const apiKeyCount = await new Promise((resolve, reject) => {
-            db.get('SELECT COUNT(*) as count FROM api_keys', [], (err, row) => {
-                if (err) reject(err);
-                resolve(row ? row.count : 0);
-            });
-        });
-
-        // Get carrier counts
-        let tmobileCount = 0;
-        let attCount = 0;
-        let verizonCount = 0;
-        let otherCarrierCount = 0;
-        
-        try {
-            tmobileCount = await new Promise((resolve, reject) => {
-                db.get('SELECT COUNT(*) as count FROM lookup_history WHERE carrier_type = ?', ['tmobile'], (err, row) => {
-                    if (err) resolve(0);
-                    else resolve(row ? row.count : 0);
-                });
-            });
-            
-            attCount = await new Promise((resolve, reject) => {
-                db.get('SELECT COUNT(*) as count FROM lookup_history WHERE carrier_type = ?', ['att'], (err, row) => {
-                    if (err) resolve(0);
-                    else resolve(row ? row.count : 0);
-                });
-            });
-            
-            verizonCount = await new Promise((resolve, reject) => {
-                db.get('SELECT COUNT(*) as count FROM lookup_history WHERE carrier_type = ?', ['verizon'], (err, row) => {
-                    if (err) resolve(0);
-                    else resolve(row ? row.count : 0);
-                });
-            });
-            
-            otherCarrierCount = await new Promise((resolve, reject) => {
-                db.get('SELECT COUNT(*) as count FROM lookup_history WHERE carrier_type = ? OR carrier_type IS NULL OR carrier_type = ""', ['other'], (err, row) => {
-                    if (err) resolve(0);
-                    else resolve(row ? row.count : 0);
-                });
-            });
-        } catch (error) {
-            console.warn('Error getting carrier counts:', error);
-        }
-
-        // Get today's check count - with error handling for missing columns
-        const today = new Date().toISOString().split('T')[0];
-        let todayChecks = 0;
-        try {
-            todayChecks = await new Promise((resolve, reject) => {
-                db.get(`SELECT SUM(daily_checks) as count FROM users WHERE last_check_date = ?`, [today], (err, row) => {
-                    if (err) {
-                        console.warn('Error getting today checks, using 0:', err.message);
-                        resolve(0);
-                    } else {
-                        resolve(row && row.count ? row.count : 0);
-                    }
-                });
-            });
-        } catch (error) {
-            console.warn('Failed to get today checks, using 0:', error.message);
+        // Get flash messages safely
+        let message = null;
+        if (req.session && req.session.flash && req.session.flash.message) {
+            message = req.session.flash.message[0];
+            delete req.session.flash.message;
         }
         
-        // Get users at limit count - with error handling for missing columns
-        let usersAtLimit = 0;
-        try {
-            usersAtLimit = await new Promise((resolve, reject) => {
-                db.get(`SELECT COUNT(*) as count FROM users WHERE daily_checks >= check_limit AND last_check_date = ?`, [today], (err, row) => {
-                    if (err) {
-                        console.warn('Error getting users at limit, using 0:', err.message);
-                        resolve(0);
-                    } else {
-                        resolve(row ? row.count : 0);
-                    }
-                });
-            });
-        } catch (error) {
-            console.warn('Failed to get users at limit, using 0:', error.message);
-        }
-        
-        // Average checks per user
-        const avgChecksPerUser = lookupCount > 0 && userCount > 0 ? (lookupCount / userCount).toFixed(2) : 0;
-        
-        return {
-            userCount,
-            blockedUserCount,
-            lookupCount,
-            validLookupCount,
-            invalidLookupCount,
-            apiKeyCount,
-            avgChecksPerUser,
-            todayChecks,
-            usersAtLimit,
-            carrierStats: {
-                tmobileCount,
-                attCount,
-                verizonCount,
-                otherCarrierCount
-            }
-        };
+        res.render('admin/proxies', {
+            title: 'Proxy Management',
+            active: 'proxies',
+            activePage: 'proxies',
+            proxies: proxies,
+            message: message
+        });
     } catch (error) {
-        console.error('Error getting stats:', error);
-        // Return default values to prevent the dashboard from crashing
-        return {
-            userCount: 0,
-            blockedUserCount: 0,
-            lookupCount: 0,
-            validLookupCount: 0,
-            invalidLookupCount: 0,
-            apiKeyCount: 0,
-            avgChecksPerUser: 0,
-            todayChecks: 0,
-            usersAtLimit: 0,
-            carrierStats: {
-                tmobileCount: 0,
-                attCount: 0,
-                verizonCount: 0,
-                otherCarrierCount: 0
-            }
-        };
+        console.error('Error fetching proxies:', error);
+        safeFlash(req, 'message', { type: 'danger', text: 'Error loading proxies: ' + error.message });
+        res.redirect('/admin/dashboard');
     }
-}
+});
 
-// Helper function to render a view
-async function renderView(viewPath, data = {}) {
-    // Provide default values for title and activePage
-    const viewData = {
-        title: 'Admin Panel',
-        activePage: '',
-        ...data
-    };
-    
-    return new Promise((resolve, reject) => {
-        ejs.renderFile(path.join(__dirname, '..', 'views', `${viewPath}.ejs`), viewData, (err, html) => {
-            if (err) reject(err);
-            resolve(html);
+// Add new proxy
+router.post('/proxies/add', isAuthenticated, async (req, res) => {
+    try {
+        const { host, port, username, password } = req.body;
+        
+        // Validate input
+        if (!host || !port) {
+            safeFlash(req, 'message', { type: 'danger', text: 'Host and port are required' });
+            return res.redirect('/admin/proxies');
+        }
+        
+        // Check if proxy already exists
+        const existingProxy = await Proxy.findOne({ host, port });
+        if (existingProxy) {
+            safeFlash(req, 'message', { type: 'warning', text: 'Proxy with this host and port already exists' });
+            return res.redirect('/admin/proxies');
+        }
+        
+        // Create new proxy
+        const proxy = new Proxy({
+            host,
+            port: parseInt(port),
+            username: username || null,
+            password: password || null,
+            status: 'unknown',
+            created_at: new Date(),
+            updated_at: new Date()
         });
-    });
-}
+        
+        await proxy.save();
+        safeFlash(req, 'message', { type: 'success', text: 'Proxy added successfully' });
+        res.redirect('/admin/proxies');
+    } catch (error) {
+        console.error('Error adding proxy:', error);
+        safeFlash(req, 'message', { type: 'danger', text: 'Error adding proxy: ' + error.message });
+        res.redirect('/admin/proxies');
+    }
+});
+
+// Edit proxy
+router.post('/proxies/edit', isAuthenticated, async (req, res) => {
+    try {
+        const { id, host, port, username, password } = req.body;
+        
+        // Validate input
+        if (!id || !host || !port) {
+            safeFlash(req, 'message', { type: 'danger', text: 'Invalid proxy data' });
+            return res.redirect('/admin/proxies');
+        }
+        
+        // Update proxy
+        await Proxy.findByIdAndUpdate(id, {
+            host,
+            port: parseInt(port),
+            username: username || null,
+            password: password || null,
+            updated_at: new Date()
+        });
+        
+        safeFlash(req, 'message', { type: 'success', text: 'Proxy updated successfully' });
+        res.redirect('/admin/proxies');
+    } catch (error) {
+        console.error('Error updating proxy:', error);
+        safeFlash(req, 'message', { type: 'danger', text: 'Error updating proxy: ' + error.message });
+        res.redirect('/admin/proxies');
+    }
+});
+
+// Delete proxy
+router.post('/proxies/delete', isAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.body;
+        
+        await Proxy.findByIdAndDelete(id);
+        
+        safeFlash(req, 'message', { type: 'success', text: 'Proxy deleted successfully' });
+        res.redirect('/admin/proxies');
+    } catch (error) {
+        console.error('Error deleting proxy:', error);
+        safeFlash(req, 'message', { type: 'danger', text: 'Error deleting proxy: ' + error.message });
+        res.redirect('/admin/proxies');
+    }
+});
+
+// Test proxy functionality
+router.post('/proxies/test', isAuthenticated, async (req, res) => {
+    try {
+        const { id } = req.body;
+        
+        // Find the proxy by ID
+        const proxy = await Proxy.findById(id);
+        if (!proxy) {
+            return res.json({ 
+                success: false, 
+                message: 'Proxy not found' 
+            });
+        }
+        
+        // Configure proxy settings for axios
+        const axiosConfig = {
+            proxy: {
+                host: proxy.host,
+                port: proxy.port
+            },
+            timeout: 10000 // 10 seconds timeout
+        };
+        
+        // Add authentication if provided
+        if (proxy.username && proxy.password) {
+            axiosConfig.proxy.auth = {
+                username: proxy.username,
+                password: proxy.password
+            };
+        }
+        
+        try {
+            // Test proxy with a request to sent.dm API
+            const testUrl = 'https://www.sent.dm/api/test-proxy';
+            
+            // Try to make request through the proxy
+            const response = await axios.get(testUrl, axiosConfig);
+            
+            // Update proxy status to working
+            await Proxy.findByIdAndUpdate(id, {
+                status: 'working',
+                last_checked: new Date(),
+                error_message: null,
+                updated_at: new Date()
+            });
+            
+            return res.json({ 
+                success: true, 
+                working: true,
+                message: 'Proxy is working correctly' 
+            });
+        } catch (error) {
+            // Update proxy status to failed
+            const errorMessage = error.message || 'Connection failed';
+            
+            await Proxy.findByIdAndUpdate(id, {
+                status: 'failed',
+                last_checked: new Date(),
+                error_message: errorMessage,
+                updated_at: new Date()
+            });
+            
+            return res.json({ 
+                success: true, 
+                working: false,
+                error: errorMessage,
+                message: `Proxy test failed: ${errorMessage}` 
+            });
+        }
+    } catch (error) {
+        console.error('Error testing proxy:', error);
+        return res.json({ 
+            success: false, 
+            message: 'Server error while testing proxy: ' + error.message 
+        });
+    }
+});
+
+// Update existing proxySystem in index.js with proxies from the database
+router.post('/proxies/sync', isAuthenticated, async (req, res) => {
+    try {
+        // Get all active proxies
+        const activeProxies = await Proxy.find({ 
+            is_active: 1,
+            status: 'working' 
+        });
+        
+        // Format message based on result
+        let message;
+        if (activeProxies.length === 0) {
+            message = 'No active working proxies found to sync';
+        } else {
+            message = `Synced ${activeProxies.length} proxies with the bot successfully`;
+            
+            // Update global proxySystem (if you have access to that variable)
+            // This part requires the proxySystem to be accessible or through some message passing
+            global.updateProxies?.(activeProxies);
+        }
+        
+        safeFlash(req, 'message', { type: 'success', text: message });
+        res.redirect('/admin/proxies');
+    } catch (error) {
+        console.error('Error syncing proxies:', error);
+        safeFlash(req, 'message', { type: 'danger', text: 'Error syncing proxies: ' + error.message });
+        res.redirect('/admin/proxies');
+    }
+});
 
 module.exports = router; 

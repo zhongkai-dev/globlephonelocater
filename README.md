@@ -1,65 +1,84 @@
 # Phone Locator Bot
 
-This bot helps you verify phone numbers and provides detailed carrier information.
+A Telegram bot that helps verify phone numbers and provides detailed carrier information.
 
 ## Features
 
 - Phone number validation
-- Carrier information
+- Carrier detection
 - Country and region detection
-- Support for bulk checking multiple numbers
-- Daily usage limits for users
+- Tracking of daily usage and limits
+- Admin panel for management
 
-## Deployment to Railway
+## Requirements
 
-### Prerequisites
+- Node.js 18+
+- MongoDB
+- Telegram Bot Token
 
-- [Railway](https://railway.app/) account
-- [Railway CLI](https://docs.railway.app/develop/cli) installed
+## Setup
 
-### Steps to Deploy
-
-1. Login to Railway:
+1. Install dependencies:
    ```
-   railway login
-   ```
-
-2. Initialize Railway project:
-   ```
-   railway init
+   npm install
    ```
 
-3. Set environment variables on Railway dashboard:
-   - TELEGRAM_BOT_TOKEN
-   - VERIPHONE_API_KEY
-   - SESSION_SECRET
-   - ADMIN_USERNAME
-   - ADMIN_PASSWORD
-
-4. Deploy the project:
+2. Configure environment variables in `.env` file:
    ```
-   railway up
-   ```
-
-5. Open the deployed project:
-   ```
-   railway open
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token
+   VERIPHONE_API_KEY=your_veriphone_api_key
+   SESSION_SECRET=your_session_secret
+   ADMIN_USERNAME=admin
+   ADMIN_PASSWORD=password
+   MONGODB_URI=your_mongodb_connection_string
+   PORT=3000
    ```
 
-## Environment Variables
+3. Start the application:
+   ```
+   npm start
+   ```
 
-The following environment variables are required:
+   For development with auto-restart:
+   ```
+   npm run dev
+   ```
 
-- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token from @BotFather
-- `VERIPHONE_API_KEY`: API key for Veriphone service
-- `SESSION_SECRET`: Secret for session management
-- `ADMIN_USERNAME`: Username for admin panel
-- `ADMIN_PASSWORD`: Password for admin panel
-- `PORT` (optional): Port for the web server, defaults to 3000
+## Docker Deployment
 
-## Local Development
+1. Build the Docker image:
+   ```
+   docker build -t phone-locator-bot .
+   ```
 
-1. Clone the repository
-2. Run `npm install`
-3. Create a `.env` file with the required environment variables
-4. Run `npm start` 
+2. Run the container:
+   ```
+   docker run -p 3000:3000 --env-file .env phone-locator-bot
+   ```
+
+## MongoDB Migration
+
+The application now uses MongoDB instead of SQLite. The database connection is configured in `models/index.js`.
+
+All data models are now stored in MongoDB collections:
+- Users
+- API Keys
+- Settings
+- Lookup History
+
+### SQLite Compatibility
+
+The application includes a compatibility layer (`db-compat.js`) that handles SQLite gracefully. This allows:
+- Running migration scripts that still reference SQLite
+- Operating in environments where SQLite may or may not be available 
+- Easy transition from SQLite to MongoDB
+
+When running in Docker, SQLite is skipped entirely using the `--no-optional` flag during installation.
+
+## Admin Panel
+
+Access the admin panel at `/admin` with the credentials set in the `.env` file.
+
+## License
+
+ISC 

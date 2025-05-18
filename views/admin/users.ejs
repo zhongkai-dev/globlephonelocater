@@ -8,6 +8,57 @@
     </div>
 </div>
 
+<!-- Display messages -->
+<% if (typeof error !== 'undefined' && error) { %>
+    <div class="alert alert-danger alert-dismissible fade show mb-4">
+        <%= error %>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+<% } %>
+
+<% if (typeof success !== 'undefined' && success) { %>
+    <div class="alert alert-success alert-dismissible fade show mb-4">
+        <%= success %>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+<% } %>
+
+<!-- Default Daily Limit Card -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">Global Default Daily Limit</h5>
+    </div>
+    <div class="card-body">
+        <form action="/admin/users/update-default-limit" method="POST" class="d-flex align-items-center">
+            <div class="input-group me-3" style="max-width: 250px;">
+                <span class="input-group-text">Default Limit</span>
+                <input type="number" name="default_limit" class="form-control" value="<%= defaultLimit || 1000 %>" min="1" required>
+                <span class="input-group-text">checks / day</span>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-all"></i> Update All Users
+            </button>
+            <small class="ms-3 text-muted">
+                This will set the daily check limit for all users at once.
+            </small>
+        </form>
+    </div>
+</div>
+
+<!-- Admin Contact Card -->
+<div class="card shadow mb-4">
+    <div class="card-header bg-info text-white">
+        <h5 class="mb-0">Administrator Contact</h5>
+    </div>
+    <div class="card-body">
+        <p class="mb-2">For inquiries regarding user blocks, daily limits, or other bot administrative issues, please contact:</p>
+        <ul class="list-unstyled">
+            <li><i class="bi bi-envelope me-2"></i>Email: <a href="mailto:admin@phonelocater.com">admin@phonelocater.com</a></li>
+            <li><i class="bi bi-telegram me-2"></i>Telegram: <a href="https://t.me/phonelocateradmin" target="_blank">@phonelocateradmin</a></li>
+        </ul>
+    </div>
+</div>
+
 <div class="card shadow">
     <div class="card-body">
         <div class="table-responsive">
@@ -34,7 +85,7 @@
                             <td><%= user.lookup_count || 0 %></td>
                             <td>
                                 <span class="badge bg-info">
-                                    <%= user.check_limit || 10 %> / day
+                                    <%= user.check_limit || 1000 %> / day
                                 </span>
                                 <% if (user.daily_checks && user.daily_checks > 0) { %>
                                     <span class="badge bg-warning ms-1">

@@ -1,0 +1,7 @@
+node_modules
+npm-debug.log
+bot.db
+.git
+.github
+.gitignore
+README.md 

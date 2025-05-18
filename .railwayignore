@@ -1,0 +1,38 @@
+# Node.js dependencies
+node_modules
+
+# Git files
+.git
+.gitignore
+
+# Log files
+*.log
+npm-debug.log*
+
+# Development files
+.env
+.env.*
+.editorconfig
+.eslintrc
+.prettierrc
+
+# Build artifacts
+build
+dist
+coverage
+
+# Docker files (Railway uses its own Docker builder)
+.dockerignore
+
+# Other unnecessary files
+README.md
+LICENSE
+CHANGELOG.md
+
+# Exclude SQLite database files
+*.db
+database/bot.db
+bot.db
+
+# Exclude migration scripts
+migrate*.js 

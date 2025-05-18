@@ -1,0 +1,293 @@
+/* Custom CSS for enhanced UI */
+
+/* Top-right alert styling */
+.top-right-alert {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    min-width: 250px;
+    max-width: 350px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1);
+    border-left: 3px solid;
+    animation: slide-in 0.5s ease-in-out;
+    font-size: 13px;
+    padding: 12px 15px;
+    border-radius: 4px;
+    font-weight: 400;
+}
+
+.top-right-alert.alert-success {
+    border-color: #28a745;
+    background-color: #f2faff;
+    color: #155724;
+}
+
+.top-right-alert.alert-danger {
+    border-color: #dc3545;
+    background-color: #fff8f8;
+    color: #721c24;
+}
+
+.top-right-alert.alert-info {
+    border-color: #17a2b8;
+    background-color: #f0f9fb;
+    color: #0c5460;
+}
+
+.top-right-alert.alert-warning {
+    border-color: #ffc107;
+    background-color: #fffbf0;
+    color: #856404;
+}
+
+.top-right-alert .btn-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 10px;
+    opacity: 0.4;
+}
+
+.top-right-alert .btn-close:hover {
+    opacity: 1;
+}
+
+@keyframes slide-in {
+    0% {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    100% {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fade-out {
+    0% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+.fade-out {
+    animation: fade-out 0.5s ease-in-out forwards;
+}
+
+/* Enhanced card styling */
+.card {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border: none;
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: 0.8rem 1rem;
+    border-radius: 8px 8px 0 0 !important;
+}
+
+.card-body {
+    padding: 1.2rem;
+}
+
+/* Button enhancements */
+.btn {
+    border-radius: 5px;
+    transition: all 0.2s ease-in-out;
+    font-weight: 500;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.btn-primary {
+    background-color: #3a86ff;
+    border-color: #3a86ff;
+}
+
+.btn-primary:hover {
+    background-color: #2a75ff;
+    border-color: #2a75ff;
+}
+
+.btn-success {
+    background-color: #2ecc71;
+    border-color: #2ecc71;
+}
+
+.btn-success:hover {
+    background-color: #27ae60;
+    border-color: #27ae60;
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    border-color: #e74c3c;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+    border-color: #c0392b;
+}
+
+/* Table styling */
+.table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table thead th {
+    border-top: none;
+    background-color: #f8f9fa;
+    color: #495057;
+    font-weight: 600;
+    font-size: 15px;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(58, 134, 255, 0.05);
+}
+
+/* API Keys table specific styles */
+.api-keys-table code {
+    font-size: 15px !important;
+    font-weight: 500;
+}
+
+.api-keys-table td {
+    font-size: 14px;
+    vertical-align: middle;
+}
+
+.api-keys-table .badge {
+    font-size: 13px;
+    padding: 6px 10px;
+}
+
+/* Badge styling */
+.badge {
+    padding: 0.4em 0.6em;
+    font-weight: 500;
+    border-radius: 4px;
+}
+
+/* Form control enhancements */
+.form-control {
+    border-radius: 5px;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #dce0e4;
+}
+
+.form-control:focus {
+    border-color: #3a86ff;
+    box-shadow: 0 0 0 0.2rem rgba(58, 134, 255, 0.25);
+}
+
+/* Navigation improvements */
+.nav-link {
+    border-radius: 5px;
+    margin-bottom: 3px;
+}
+
+/* Small box improvements */
+.small-box {
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 0.2s ease-in-out;
+}
+
+.small-box:hover {
+    transform: translateY(-5px);
+}
+
+/* Better sidebar */
+.sidebar {
+    background-color: #f8f9fa;
+}
+
+/* Improved breadcrumb */
+.breadcrumb {
+    background-color: transparent;
+    padding: 0;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+}
+
+/* Main wrapper */
+.content-wrapper {
+    background-color: #f9fafb;
+    min-height: calc(100vh - 56px);
+}
+
+/* Navbar improvements */
+.navbar-dark {
+    background-color: #3a86ff !important;
+}
+
+/* Input groups */
+.input-group-append .btn {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+/* Modal Enhancements */
+.modal-content {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 1rem 1.5rem;
+}
+
+.modal-header .btn-close-white {
+    filter: brightness(0) invert(1);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 1rem 1.5rem;
+}
+
+.modal-backdrop.show {
+    opacity: 0.7;
+}
+
+/* Add animation to modal */
+.modal.fade .modal-dialog {
+    transition: transform 0.3s ease-out;
+    transform: scale(0.9);
+}
+
+.modal.show .modal-dialog {
+    transform: scale(1);
+}
+
+/* Global font settings */
+html, body {
+    font-family: 'Poppins', sans-serif;
+}
+
+*, *::before, *::after {
+    font-family: 'Poppins', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6, p, a, button, input, select, textarea, label, span, div {
+    font-family: 'Poppins', sans-serif;
+} 

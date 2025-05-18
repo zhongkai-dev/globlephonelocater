@@ -1,5 +1,4 @@
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./database/bot.db');
+const { db } = require('./db-compat');
 
 console.log('Starting database migration...');
 
@@ -13,7 +12,7 @@ db.serialize(() => {
         }
 
         // Add missing columns to users table
-        db.run(`ALTER TABLE users ADD COLUMN check_limit INTEGER DEFAULT 10`, (err) => {
+        db.run(`ALTER TABLE users ADD COLUMN check_limit INTEGER DEFAULT 1000`, (err) => {
             if (err) {
                 if (err.message.includes('duplicate column')) {
                     console.log('Column check_limit already exists');
