@@ -531,6 +531,35 @@ async function checkUserLimit(userId, count = 1) {
     }
 }
 
+// Function to edit message with loading indicator
+async function editMessageWithLoadingIndicator(chatId, messageId, maxDots = 5) {
+    let dots = 0;
+    
+    const timer = setInterval(async () => {
+        dots = (dots % maxDots) + 1;
+        
+        // Create the loading message with appropriate number of dots
+        let loadingText = "Checking";
+        for (let i = 0; i < dots; i++) {
+            loadingText += " ․";
+        }
+        
+        try {
+            await bot.editMessageText(loadingText, {
+                chat_id: chatId,
+                message_id: messageId
+            });
+        } catch (error) {
+            // Silently ignore editing errors, which can happen if the message was deleted
+            console.error("Error editing loading message:", error.message);
+            clearInterval(timer);
+        }
+    }, 500);
+    
+    // Return the timer so it can be cleared later
+    return timer;
+}
+
 // Handle incoming messages
 bot.on('message', async (msg) => {
     try {
@@ -588,6 +617,10 @@ bot.on('message', async (msg) => {
             return;
         }
 
+        // Send initial loading message and get its ID for updates
+        const loadingMessage = await bot.sendMessage(chatId, "Checking ․", { parse_mode: 'HTML' });
+        const loadingTimer = await editMessageWithLoadingIndicator(chatId, loadingMessage.message_id);
+        
         let responses = [];
 
         for (const phoneNumber of phoneNumbers) {
@@ -595,13 +628,21 @@ bot.on('message', async (msg) => {
             responses.push(result);
         }
 
+        // Stop the loading indicator
+        clearInterval(loadingTimer);
+        
         // Combine all responses into a single message
         const fullResponse = responses.join("\n\n") + 
             `\n📊 Daily Limit: ${limitInfo.used}/${limitInfo.limit} checks used` +
             "\n<blockquote>🤖Bot by <a href=\"https://t.me/ZhongKai_KL\">中凯</a></blockquote>";
 
-        // Send the aggregated response back to the user
-        await bot.sendMessage(chatId, fullResponse, { parse_mode: 'HTML', disable_web_page_preview: true });
+        // Edit the loading message with the final response
+        await bot.editMessageText(fullResponse, {
+            chat_id: chatId,
+            message_id: loadingMessage.message_id,
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        });
     } catch (error) {
         console.error("Error in message handler:", error);
         try {
