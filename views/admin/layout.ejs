@@ -3,257 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= title %> - Phone Location Bot Admin</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="/css/custom.css" rel="stylesheet">
+    <title><%= title %> - Phone Locator Bot Admin</title>
+    
+    <!-- Fonts and Icons -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    
+    <!-- CSS Files -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap4.min.css">
     <style>
-        * {
-            font-family: 'Poppins', sans-serif;
+        /* Core Admin Panel Styles */
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #f5f6fa;
         }
         
-        body {
-            font-family: 'Poppins', sans-serif;
+        .page-inner {
+            padding: 1.5rem;
         }
         
         .sidebar {
-            min-height: calc(100vh - 56px);
-            background-color: #f8f9fa;
-            border-right: 1px solid #e9ecef;
+            width: 250px;
+            position: fixed;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            z-index: 10;
+            background: #ffffff;
+            box-shadow: 0 0 30px 0 rgba(82, 63, 105, 0.05);
+            transition: all 0.3s;
         }
-        .sidebar .nav-link {
-            color: #495057;
-            padding: 0.75rem 1rem;
-            border-radius: 0;
-        }
-        .sidebar .nav-link:hover {
-            background-color: #e9ecef;
-        }
-        .sidebar .nav-link.active {
-            background-color: #3a86ff;
-            color: white;
-        }
-        .sidebar .nav-link i {
-            margin-right: 10px;
-        }
-        .content {
+        
+        .sidebar-content {
             padding: 20px;
         }
         
-        /* Loader Styles */
-        .page-loader-wrapper {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 9999;
-            background-color: rgba(255, 255, 255, 0.9);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            transition: opacity 0.5s ease;
-        }
-        
-        .loader {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            display: inline-block;
+        .main-panel {
             position: relative;
-            border: 3px solid;
-            border-color: #3a86ff #3a86ff transparent;
-            animation: rotation 1s linear infinite;
+            width: calc(100% - 250px);
+            margin-left: 250px;
+            min-height: 100vh;
+            transition: all 0.3s;
         }
         
-        .loader::after {
-            content: '';
-            position: absolute;
-            left: 0;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            margin: auto;
-            border: 3px solid;
-            border-color: transparent #FF3D00 #FF3D00;
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            animation: rotationBack 0.5s linear infinite;
-            transform-origin: center center;
+        .main-header {
+            background: #fff;
+            box-shadow: 0 0 10px 0 rgba(82, 63, 105, 0.1);
+            margin-bottom: 20px;
         }
         
-        @keyframes rotation {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(360deg);
-            }
-        } 
-        
-        @keyframes rotationBack {
-            0% {
-                transform: rotate(0deg);
-            }
-            100% {
-                transform: rotate(-360deg);
-            }
+        .logo-header {
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            height: 60px;
+            background: #1572e8;
         }
         
-        .hide-loader {
-            opacity: 0;
-            pointer-events: none;
+        .logo-header .logo {
+            color: #ffffff;
+            font-size: 1.5rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+        
+        .nav-item .nav-link {
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            color: #495057;
+        }
+        
+        .nav-item .nav-link i {
+            margin-right: 15px;
+            font-size: 16px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        .nav-item.active .nav-link {
+            background: #1572e8;
+            color: #ffffff;
+            border-radius: 5px;
+        }
+        
+        .card {
+            border: none;
+            box-shadow: 0 0.75rem 1.5rem rgba(18, 38, 63, 0.03);
+            margin-bottom: 20px;
+        }
+        
+        .card-header {
+            background-color: #ffffff;
+            border-bottom: 1px solid #f1f1f1;
+            padding: 15px 20px;
+        }
+        
+        .table-responsive {
+            padding: 0 15px 15px;
+        }
+        
+        .footer {
+            padding: 15px 0;
+            border-top: 1px solid #eee;
+            background: #fff;
         }
     </style>
 </head>
 <body>
-    <!-- Page Loader -->
-    <div class="page-loader-wrapper">
-        <div class="loader"></div>
-    </div>
-
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/admin/dashboard">Phone Location Bot Admin</a>
-            <div class="ms-auto d-flex">
-                <div class="navbar-nav">
-                    <a class="nav-link" href="/admin/logout"><i class="bi bi-box-arrow-right"></i> Logout</a>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Alerts container -->
-    <div id="alerts-container"></div>
-    
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar p-0">
-                <div class="d-flex flex-column flex-shrink-0 p-3">
-                    <ul class="nav nav-pills flex-column mb-auto">
-                        <li class="nav-item">
-                            <a href="/admin/dashboard" class="nav-link <%= activePage === 'dashboard' ? 'active' : '' %>">
-                                <i class="bi bi-speedometer2"></i>
-                                Dashboard
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="/admin/users" class="nav-link <%= activePage === 'users' ? 'active' : '' %>">
-                                <i class="bi bi-people"></i>
-                                Manage Users
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="/admin/api-keys" class="nav-link <%= activePage === 'api-keys' ? 'active' : '' %>">
-                                <i class="bi bi-key"></i>
-                                Manage API Keys
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a href="/admin/history" class="nav-link <%= activePage === 'history' ? 'active' : '' %>">
-                                <i class="bi bi-clock-history"></i>
-                                Check History
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Content -->
-            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 content">
+    <div class="wrapper">
+        <!-- Include header partial -->
+        <%- include('partials/header') %>
+        
+        <!-- Main Content -->
+        <div class="main-panel">
+            <div class="content">
                 <%- body %>
-            </main>
+            </div>
+            
+            <!-- Include footer partial -->
+            <%- include('partials/footer') %>
         </div>
     </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Alert handling script -->
+    <!-- Core JS Files -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap4.min.js"></script>
+    
+    <!-- Custom Admin Panel Scripts -->
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Hide loader when page is fully loaded
-            const loader = document.querySelector('.page-loader-wrapper');
-            if (loader) {
-                loader.classList.add('hide-loader');
-                setTimeout(() => {
-                    loader.style.display = 'none';
-                }, 500);
-            }
-            
-            // Setup loader for navigation
-            document.addEventListener('click', function(e) {
-                // Check if the clicked element is a link that navigates to another page
-                if (e.target.tagName === 'A' && e.target.href && 
-                    !e.target.href.includes('#') && !e.target.target && 
-                    e.target.href !== window.location.href) {
-                    // Show loader
-                    loader.style.display = 'flex';
-                    loader.classList.remove('hide-loader');
-                }
-            });
-            
-            // Check if there are success or error messages
-            const errorElement = document.querySelector('.alert-danger:not(.top-right-alert)');
-            const successElement = document.querySelector('.alert-success:not(.top-right-alert)');
-            
-            // Move alerts to top-right position
-            if (errorElement) {
-                showTopRightAlert(errorElement.innerHTML, 'danger');
-                errorElement.remove();
-            }
-            
-            if (successElement) {
-                showTopRightAlert(successElement.innerHTML, 'success');
-                successElement.remove();
-            }
-            
-            // Function to show top-right alerts
-            function showTopRightAlert(message, type) {
-                const alertsContainer = document.getElementById('alerts-container');
-                const alertElement = document.createElement('div');
-                alertElement.className = `alert alert-${type} alert-dismissible fade show top-right-alert`;
-                
-                // Clean up message by removing any HTML from buttons
-                let cleanMessage = message;
-                if (cleanMessage.includes('button')) {
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = cleanMessage;
-                    const buttons = tempDiv.querySelectorAll('button');
-                    buttons.forEach(btn => btn.remove());
-                    cleanMessage = tempDiv.innerHTML.trim();
-                }
-                
-                alertElement.innerHTML = `
-                    ${cleanMessage}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                `;
-                
-                alertsContainer.appendChild(alertElement);
-                
-                // Auto-dismiss after 5 seconds
-                setTimeout(() => {
-                    alertElement.classList.add('fade-out');
-                    setTimeout(() => {
-                        alertElement.remove();
-                    }, 500);
-                }, 5000);
-                
-                // Close button functionality
-                const closeButton = alertElement.querySelector('.btn-close');
-                closeButton.addEventListener('click', function() {
-                    alertElement.classList.add('fade-out');
-                    setTimeout(() => {
-                        alertElement.remove();
-                    }, 500);
+        $(document).ready(function() {
+            // Initialize DataTables if present
+            if ($('.table').length > 0) {
+                $('.table').DataTable({
+                    responsive: true
                 });
             }
             
-            // For debugging - show a test success message
-            // Uncomment this to test alert styling
-            // showTopRightAlert('All API keys activated successfully', 'success');
+            // Initialize tooltips
+            $('[data-toggle="tooltip"]').tooltip();
+            
+            // Flash message handling
+            setTimeout(function() {
+                $('.alert-dismissible').fadeOut('slow');
+            }, 3000);
         });
     </script>
 </body>
