@@ -7,147 +7,324 @@
     
     <!-- Fonts and Icons -->
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Nunito:200,200i,300,300i,400,400i,600,600i,700,700i,800,800i,900,900i">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     
     <!-- CSS Files -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.datatables.net/1.11.5/css/dataTables.bootstrap4.min.css">
+    
     <style>
-        /* Core Admin Panel Styles */
+        :root {
+            --primary: #1572e8;
+            --secondary: #6c757d;
+            --success: #31ce36;
+            --danger: #f25961;
+            --warning: #ffad46;
+            --info: #48abf7;
+        }
+        
         body {
             font-family: 'Nunito', sans-serif;
-            background-color: #f5f6fa;
+            background: #f8f9fa;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
         }
         
-        .page-inner {
-            padding: 1.5rem;
-        }
-        
+        /* Sidebar */
         .sidebar {
-            width: 250px;
             position: fixed;
             top: 0;
-            bottom: 0;
             left: 0;
-            z-index: 10;
-            background: #ffffff;
-            box-shadow: 0 0 30px 0 rgba(82, 63, 105, 0.05);
-            transition: all 0.3s;
+            bottom: 0;
+            width: 260px;
+            background: #fff;
+            box-shadow: 0 0 5px rgba(18, 23, 39, 0.5);
+            z-index: 1000;
+            transition: all .3s ease-in-out;
         }
         
-        .sidebar-content {
-            padding: 20px;
-        }
-        
+        /* Main Panel */
         .main-panel {
             position: relative;
-            width: calc(100% - 250px);
-            margin-left: 250px;
-            min-height: 100vh;
-            transition: all 0.3s;
+            width: calc(100% - 260px);
+            height: 100vh;
+            min-height: 100%;
+            margin-left: 260px;
+            transition: all .3s ease-in-out;
         }
         
+        /* Main Header */
         .main-header {
             background: #fff;
-            box-shadow: 0 0 10px 0 rgba(82, 63, 105, 0.1);
-            margin-bottom: 20px;
+            box-shadow: 0 0 5px rgba(18, 23, 39, 0.1);
         }
         
         .logo-header {
-            padding: 15px 20px;
-            display: flex;
-            align-items: center;
-            height: 60px;
-            background: #1572e8;
+            float: left;
+            width: 260px;
+            background: var(--primary);
+            padding: 0 25px;
+            height: 70px;
+            line-height: 70px;
+            position: relative;
         }
         
         .logo-header .logo {
-            color: #ffffff;
-            font-size: 1.5rem;
+            color: #fff;
+            font-size: 24px;
             font-weight: 700;
             text-decoration: none;
         }
         
-        .nav-item .nav-link {
-            padding: 12px 20px;
+        .navbar-header {
             display: flex;
             align-items: center;
-            color: #495057;
+            height: 70px;
+            padding: 0 20px;
+            background: #fff;
+            margin-left: 260px;
         }
         
-        .nav-item .nav-link i {
+        /* Content */
+        .content {
+            padding: 30px 15px;
+        }
+        
+        .page-inner {
+            padding: 0 15px;
+        }
+        
+        /* Cards */
+        .card {
+            border: 0;
+            border-radius: 5px;
+            box-shadow: 0 1px 20px 0 rgba(69, 90, 100, 0.08);
+            margin-bottom: 30px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            word-wrap: break-word;
+            background: #fff;
+            background-clip: border-box;
+        }
+        
+        .card-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #f1f1f1;
+            background-color: transparent;
+            font-weight: 600;
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        /* Nav */
+        .sidebar .nav {
+            margin-top: 20px;
+        }
+        
+        .sidebar .nav .nav-item {
+            margin-bottom: 3px;
+        }
+        
+        .sidebar .nav .nav-item .nav-link {
+            padding: 12px 20px;
+            color: #495057;
+            font-weight: 500;
+            border-radius: 5px;
+            margin: 0 15px;
+        }
+        
+        .sidebar .nav .nav-item .nav-link i {
+            font-size: 18px;
             margin-right: 15px;
-            font-size: 16px;
             width: 20px;
             text-align: center;
         }
         
-        .nav-item.active .nav-link {
-            background: #1572e8;
-            color: #ffffff;
+        .sidebar .nav .nav-item.active .nav-link {
+            background: var(--primary);
+            color: #fff;
+            box-shadow: 0 4px 20px 0 rgba(0,0,0,.14),0 7px 10px -5px rgba(21, 114, 232, 0.4);
+        }
+        
+        .sidebar .nav .nav-item:not(.active) .nav-link:hover {
+            background: #f8f9fa;
+        }
+        
+        /* Tables */
+        .table {
+            width: 100%;
+            margin-bottom: 1rem;
+            color: #212529;
+            background-color: transparent;
+        }
+        
+        .table thead th {
+            vertical-align: bottom;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        /* Form elements */
+        .form-control {
+            padding: .375rem .75rem;
             border-radius: 5px;
         }
         
-        .card {
-            border: none;
-            box-shadow: 0 0.75rem 1.5rem rgba(18, 38, 63, 0.03);
-            margin-bottom: 20px;
+        .btn {
+            padding: .375rem .75rem;
+            border-radius: 5px;
         }
         
-        .card-header {
-            background-color: #ffffff;
-            border-bottom: 1px solid #f1f1f1;
-            padding: 15px 20px;
+        .btn-primary {
+            background-color: var(--primary);
+            border-color: var(--primary);
         }
         
-        .table-responsive {
-            padding: 0 15px 15px;
+        .btn-success {
+            background-color: var(--success);
+            border-color: var(--success);
         }
         
+        .btn-danger {
+            background-color: var(--danger);
+            border-color: var(--danger);
+        }
+        
+        /* Footer */
         .footer {
-            padding: 15px 0;
             border-top: 1px solid #eee;
+            padding: 20px;
             background: #fff;
+            margin-top: auto;
         }
     </style>
 </head>
 <body>
     <div class="wrapper">
-        <!-- Include header partial -->
-        <%- include('partials/header') %>
-        
-        <!-- Main Content -->
-        <div class="main-panel">
-            <div class="content">
-                <%- body %>
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo-header">
+                <a href="/admin/dashboard" class="logo">
+                    Phone Locator
+                </a>
             </div>
             
-            <!-- Include footer partial -->
-            <%- include('partials/footer') %>
+            <ul class="nav">
+                <li class="nav-item <%= activePage === 'dashboard' ? 'active' : '' %>">
+                    <a href="/admin/dashboard" class="nav-link">
+                        <i class="fas fa-home"></i>
+                        <p>Dashboard</p>
+                    </a>
+                </li>
+                <li class="nav-item <%= activePage === 'users' ? 'active' : '' %>">
+                    <a href="/admin/users" class="nav-link">
+                        <i class="fas fa-users"></i>
+                        <p>User Management</p>
+                    </a>
+                </li>
+                <li class="nav-item <%= activePage === 'proxies' ? 'active' : '' %>">
+                    <a href="/admin/proxies" class="nav-link">
+                        <i class="fas fa-server"></i>
+                        <p>Proxy Management</p>
+                    </a>
+                </li>
+                <li class="nav-item <%= activePage === 'api-keys' ? 'active' : '' %>">
+                    <a href="/admin/api-keys" class="nav-link">
+                        <i class="fas fa-key"></i>
+                        <p>API Keys</p>
+                    </a>
+                </li>
+                <li class="nav-item <%= activePage === 'history' ? 'active' : '' %>">
+                    <a href="/admin/history" class="nav-link">
+                        <i class="fas fa-history"></i>
+                        <p>Lookup History</p>
+                    </a>
+                </li>
+                <li class="nav-item <%= activePage === 'statistics' ? 'active' : '' %>">
+                    <a href="/admin/statistics" class="nav-link">
+                        <i class="fas fa-chart-bar"></i>
+                        <p>Statistics</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/admin/logout" class="nav-link">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <p>Logout</p>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        
+        <!-- Main Panel -->
+        <div class="main-panel">
+            <!-- Top Navigation -->
+            <div class="main-header">
+                <div class="navbar-header">
+                    <h4 class="mb-0"><%= title %></h4>
+                    <div class="ml-auto">
+                        <ul class="navbar-nav">
+                            <li class="nav-item">
+                                <span class="text-muted">Admin Panel</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Content -->
+            <div class="content">
+                <div class="page-inner">
+                    <%- body %>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <footer class="footer">
+                <div class="container-fluid">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <a href="https://github.com/zhongkai-dev/phone-location-bot" target="_blank">
+                                <i class="fab fa-github"></i> GitHub
+                            </a>
+                        </div>
+                        <div class="col-md-6 text-right">
+                            <span>Phone Locator Bot Admin &copy; <%= new Date().getFullYear() %></span>
+                        </div>
+                    </div>
+                </div>
+            </footer>
         </div>
     </div>
     
     <!-- Core JS Files -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/1.11.5/js/dataTables.bootstrap4.min.js"></script>
     
-    <!-- Custom Admin Panel Scripts -->
+    <!-- Custom Scripts -->
     <script>
         $(document).ready(function() {
-            // Initialize DataTables if present
+            // Initialize DataTables
             if ($('.table').length > 0) {
                 $('.table').DataTable({
-                    responsive: true
+                    responsive: true,
+                    language: {
+                        search: "_INPUT_",
+                        searchPlaceholder: "Search records"
+                    }
                 });
             }
             
             // Initialize tooltips
             $('[data-toggle="tooltip"]').tooltip();
             
-            // Flash message handling
+            // Handle flash messages
             setTimeout(function() {
                 $('.alert-dismissible').fadeOut('slow');
             }, 3000);
