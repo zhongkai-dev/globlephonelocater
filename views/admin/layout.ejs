@@ -42,6 +42,7 @@
             box-shadow: 0 0 5px rgba(18, 23, 39, 0.5);
             z-index: 1000;
             transition: all .3s ease-in-out;
+            overflow-y: auto;
         }
         
         /* Main Panel */
@@ -124,18 +125,24 @@
         /* Nav */
         .sidebar .nav {
             margin-top: 20px;
+            padding: 0;
+            list-style: none;
         }
         
         .sidebar .nav .nav-item {
             margin-bottom: 3px;
+            padding: 0;
         }
         
         .sidebar .nav .nav-item .nav-link {
-            padding: 12px 20px;
+            padding: 12px 25px;
             color: #495057;
             font-weight: 500;
             border-radius: 5px;
             margin: 0 15px;
+            display: flex;
+            align-items: center;
+            position: relative;
         }
         
         .sidebar .nav .nav-item .nav-link i {
@@ -143,6 +150,12 @@
             margin-right: 15px;
             width: 20px;
             text-align: center;
+            vertical-align: middle;
+        }
+        
+        .sidebar .nav .nav-item .nav-link p {
+            margin: 0;
+            font-size: 14px;
         }
         
         .sidebar .nav .nav-item.active .nav-link {
@@ -201,6 +214,15 @@
             background: #fff;
             margin-top: auto;
         }
+        
+        /* Notifications container */
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            width: 300px;
+        }
     </style>
 </head>
 <body>
@@ -213,6 +235,7 @@
                 </a>
             </div>
             
+            <!-- Sidebar navigation -->
             <ul class="nav">
                 <li class="nav-item <%= activePage === 'dashboard' ? 'active' : '' %>">
                     <a href="/admin/dashboard" class="nav-link">
@@ -274,6 +297,9 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Notifications area -->
+            <div id="notifications"></div>
             
             <!-- Content -->
             <div class="content">
