@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: phonelocater
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGODB_URI
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: VERIPHONE_API_KEY
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+    healthCheckPath: / 

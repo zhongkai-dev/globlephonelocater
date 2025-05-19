@@ -1,6 +1,34 @@
 # Phone Locator Bot
 
-A Telegram bot that helps verify phone numbers and provides detailed carrier information.
+This application helps verify phone numbers and provides carrier information.
+
+## Deployment Instructions for Render.com
+
+1. Create a free account on [Render.com](https://render.com)
+2. Connect your GitHub account to Render
+3. Push this code to a GitHub repository:
+   ```
+   git init
+   git add .
+   git commit -m "Initial commit"
+   git remote add origin https://github.com/yourusername/phonelocater.git
+   git push -u origin main
+   ```
+4. In Render dashboard, click "New" → "Blueprint"
+5. Select the GitHub repository with this code
+6. Render will automatically detect the `render.yaml` configuration
+7. Set up these required environment variables:
+   - `MONGODB_URI`: Your MongoDB connection string
+   - `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
+   - `VERIPHONE_API_KEY`: Your Veriphone API key
+
+The application will be automatically deployed and available at a Render-provided URL.
+
+## Setting up MongoDB
+
+For the database, you can use:
+- [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) (free tier)
+- Render's MongoDB service (requires credit card for verification)
 
 ## Features
 

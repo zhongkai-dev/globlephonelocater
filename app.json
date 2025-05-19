@@ -1,0 +1,31 @@
+{
+  "name": "Phone Locator Bot",
+  "description": "A Telegram bot for phone number verification and carrier information",
+  "repository": "https://github.com/yourusername/phonelocater",
+  "logo": "https://node-js-sample.herokuapp.com/node.png",
+  "keywords": ["node", "express", "telegram", "phone", "mongodb"],
+  "env": {
+    "MONGODB_URI": {
+      "description": "MongoDB connection string",
+      "required": true
+    },
+    "TELEGRAM_BOT_TOKEN": {
+      "description": "Telegram Bot Token from BotFather",
+      "required": true
+    },
+    "VERIPHONE_API_KEY": {
+      "description": "Veriphone API Key for phone verification",
+      "required": true
+    },
+    "SESSION_SECRET": {
+      "description": "Secret key for session management",
+      "generator": "secret"
+    }
+  },
+  "addons": [
+    {
+      "plan": "mongolab:sandbox",
+      "as": "MONGODB"
+    }
+  ]
+} 
