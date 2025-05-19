@@ -31,6 +31,15 @@
             overflow-x: hidden;
         }
         
+        /* Wrapper */
+        .wrapper {
+            position: relative;
+            width: 100%;
+            min-height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+        
         /* Sidebar */
         .sidebar {
             position: fixed;
@@ -43,16 +52,18 @@
             z-index: 1000;
             transition: all .3s ease-in-out;
             overflow-y: auto;
+            display: block !important;
         }
         
         /* Main Panel */
         .main-panel {
             position: relative;
             width: calc(100% - 260px);
-            height: 100vh;
-            min-height: 100%;
+            min-height: 100vh;
             margin-left: 260px;
             transition: all .3s ease-in-out;
+            background-color: #f8f9fa;
+            float: right;
         }
         
         /* Main Header */
@@ -62,7 +73,6 @@
         }
         
         .logo-header {
-            float: left;
             width: 260px;
             background: var(--primary);
             padding: 0 25px;
@@ -76,6 +86,7 @@
             font-size: 24px;
             font-weight: 700;
             text-decoration: none;
+            display: block;
         }
         
         .navbar-header {
@@ -84,7 +95,6 @@
             height: 70px;
             padding: 0 20px;
             background: #fff;
-            margin-left: 260px;
         }
         
         /* Content */
@@ -223,6 +233,31 @@
             z-index: 9999;
             width: 300px;
         }
+        
+        /* Fixing mobile display */
+        @media (max-width: 991px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                display: block !important;
+            }
+            
+            .main-panel {
+                width: 100%;
+                margin-left: 0;
+                transition: all .3s;
+            }
+            
+            .sidebar-mini .sidebar {
+                transform: translate3d(-260px, 0, 0);
+                transition: all .3s;
+            }
+            
+            .sidebar-mini .main-panel {
+                margin-left: 0;
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
@@ -354,6 +389,10 @@
             setTimeout(function() {
                 $('.alert-dismissible').fadeOut('slow');
             }, 3000);
+            
+            // Force sidebar to be visible
+            $('.sidebar').css('display', 'block');
+            $('.sidebar').css('left', '0');
         });
     </script>
 </body>
