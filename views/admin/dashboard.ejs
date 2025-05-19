@@ -1,189 +1,188 @@
 <!-- Dashboard -->
-<div class="content-wrapper">
-    <div class="content-header">
-        <div class="container-fluid">
-            <div class="row mb-2">
-                <div class="col-sm-6">
-                    <h1 class="m-0">Dashboard</h1>
+<div class="page-header">
+    <h4 class="page-title">Dashboard</h4>
+    <ul class="breadcrumbs">
+        <li class="nav-home">
+            <a href="/admin/dashboard">
+                <i class="fas fa-home"></i>
+            </a>
+        </li>
+        <li class="separator">
+            <i class="fas fa-angle-right"></i>
+        </li>
+        <li class="nav-item">
+            <a href="#">Dashboard</a>
+        </li>
+    </ul>
+</div>
+
+<div class="page-inner mt-4">
+    <!-- Display messages -->
+    <% if (typeof error !== 'undefined' && error) { %>
+        <div class="alert alert-danger alert-dismissible fade show">
+            <i class="fas fa-exclamation-circle mr-2"></i> <%= error %>
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+        </div>
+    <% } %>
+    
+    <% if (typeof success !== 'undefined' && success) { %>
+        <div class="alert alert-success alert-dismissible fade show">
+            <i class="fas fa-check-circle mr-2"></i> <%= success %>
+            <button type="button" class="close" data-dismiss="alert">&times;</button>
+        </div>
+    <% } %>
+
+    <!-- Stats Boxes -->
+    <div class="row">
+        <div class="col-lg-3 col-md-6">
+            <div class="small-box bg-info">
+                <div class="inner">
+                    <h3><%= stats.totalUsers %></h3>
+                    <p>Total Users</p>
                 </div>
-                <div class="col-sm-6">
-                    <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item"><a href="/admin/dashboard">Home</a></li>
-                        <li class="breadcrumb-item active">Dashboard</li>
-                    </ol>
+                <div class="icon">
+                    <i class="fas fa-users"></i>
                 </div>
+                <a href="/admin/users" class="small-box-footer">More info <i class="fas fa-arrow-circle-right ml-1"></i></a>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="small-box bg-success">
+                <div class="inner">
+                    <h3><%= stats.totalLookups %></h3>
+                    <p>Total Lookups</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-search"></i>
+                </div>
+                <a href="/admin/history" class="small-box-footer">More info <i class="fas fa-arrow-circle-right ml-1"></i></a>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="small-box bg-warning">
+                <div class="inner">
+                    <h3><%= stats.todayLookups %></h3>
+                    <p>Today's Checks</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <a href="/admin/history" class="small-box-footer">More info <i class="fas fa-arrow-circle-right ml-1"></i></a>
+            </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+            <div class="small-box bg-danger">
+                <div class="inner">
+                    <h3><%= stats.limitReachedUsers %></h3>
+                    <p>Users At Limit</p>
+                </div>
+                <div class="icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <a href="/admin/users" class="small-box-footer">More info <i class="fas fa-arrow-circle-right ml-1"></i></a>
             </div>
         </div>
     </div>
 
-    <div class="content">
-        <div class="container-fluid">
-            <!-- Display messages -->
-            <% if (typeof error !== 'undefined' && error) { %>
-                <div class="alert alert-danger alert-dismissible fade show">
-                    <%= error %>
-                    <button type="button" class="close" data-dismiss="alert">&times;</button>
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Recent Lookups -->
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Recent Lookups</h4>
                 </div>
-            <% } %>
-            
-            <% if (typeof success !== 'undefined' && success) { %>
-                <div class="alert alert-success alert-dismissible fade show">
-                    <%= success %>
-                    <button type="button" class="close" data-dismiss="alert">&times;</button>
-                </div>
-            <% } %>
-
-            <!-- Stats Boxes -->
-            <div class="row">
-                <div class="col-lg-3 col-6">
-                    <div class="small-box bg-info">
-                        <div class="inner">
-                            <h3><%= stats.totalUsers %></h3>
-                            <p>Total Users</p>
-                        </div>
-                        <div class="icon">
-                            <i class="bi bi-people"></i>
-                        </div>
-                        <a href="/admin/users" class="small-box-footer">More info <i class="bi bi-arrow-right-circle"></i></a>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Phone Number</th>
+                                    <th>Country</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% if (recentLookups && recentLookups.length > 0) { %>
+                                    <% recentLookups.forEach(lookup => { %>
+                                        <tr>
+                                            <td>
+                                                <a href="/admin/users/<%= lookup.user ? lookup.user.telegram_id : lookup.user_id %>">
+                                                    <%= lookup.user ? (lookup.user.username || lookup.user.first_name || 'Unknown') : 'Unknown' %>
+                                                </a>
+                                            </td>
+                                            <td><%= lookup.phone_number || 'N/A' %></td>
+                                            <td><%= lookup.country || 'N/A' %></td>
+                                            <td><%= lookup.created_at ? new Date(lookup.created_at).toLocaleString() : 'N/A' %></td>
+                                        </tr>
+                                    <% }); %>
+                                <% } else { %>
+                                    <tr>
+                                        <td colspan="4" class="text-center">No recent lookups found.</td>
+                                    </tr>
+                                <% } %>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-
-                <div class="col-lg-3 col-6">
-                    <div class="small-box bg-success">
-                        <div class="inner">
-                            <h3><%= stats.totalLookups %></h3>
-                            <p>Total Lookups</p>
-                        </div>
-                        <div class="icon">
-                            <i class="bi bi-search"></i>
-                        </div>
-                        <a href="/admin/history" class="small-box-footer">More info <i class="bi bi-arrow-right-circle"></i></a>
-                    </div>
+                <div class="card-footer">
+                    <a href="/admin/history" class="btn btn-sm btn-primary float-right">View All Lookups</a>
                 </div>
+            </div>
+        </div>
 
-                <div class="col-lg-3 col-6">
-                    <div class="small-box bg-warning">
-                        <div class="inner">
-                            <h3><%= stats.todayLookups %></h3>
-                            <p>Today's Checks</p>
-                        </div>
-                        <div class="icon">
-                            <i class="bi bi-clock"></i>
-                        </div>
-                        <a href="/admin/history" class="small-box-footer">More info <i class="bi bi-arrow-right-circle"></i></a>
-                    </div>
+        <div class="col-md-4">
+            <!-- Bot Status -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="card-title">Bot Status</h4>
+                    <span class="badge badge-<%= botStatus === 'active' ? 'success' : 'danger' %>">
+                        <%= botStatus === 'active' ? 'Online' : 'Offline' %>
+                    </span>
                 </div>
-
-                <div class="col-lg-3 col-6">
-                    <div class="small-box bg-danger">
-                        <div class="inner">
-                            <h3><%= stats.limitReachedUsers %></h3>
-                            <p>Users At Limit</p>
-                        </div>
-                        <div class="icon">
-                            <i class="bi bi-exclamation-triangle"></i>
-                        </div>
-                        <a href="/admin/users" class="small-box-footer">More info <i class="bi bi-arrow-right-circle"></i></a>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-3">
+                        <form action="/admin/bot/start" method="POST">
+                            <button type="submit" class="btn btn-success" <%= botStatus === 'active' ? 'disabled' : '' %>>
+                                <i class="fas fa-play"></i> Start Bot
+                            </button>
+                        </form>
+                        <form action="/admin/bot/stop" method="POST">
+                            <button type="submit" class="btn btn-danger" <%= botStatus !== 'active' ? 'disabled' : '' %>>
+                                <i class="fas fa-stop"></i> Stop Bot
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <i class="fas fa-info-circle"></i> 
+                        Bot is using API keys in rotation. Each request uses a different key to avoid rate limits.
                     </div>
                 </div>
             </div>
 
-            <div class="row">
-                <div class="col-md-7">
-                    <!-- Recent Lookups -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">Recent Lookups</h3>
-                        </div>
-                        <div class="card-body table-responsive p-0">
-                            <table class="table table-hover text-nowrap">
-                                <thead>
-                                    <tr>
-                                        <th>User</th>
-                                        <th>Phone Number</th>
-                                        <th>Country</th>
-                                        <th>Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <% if (recentLookups && recentLookups.length > 0) { %>
-                                        <% recentLookups.forEach(lookup => { %>
-                                            <tr>
-                                                <td>
-                                                    <a href="/admin/users/<%= lookup.user ? lookup.user.telegram_id : lookup.user_id %>">
-                                                        <%= lookup.user ? (lookup.user.username || lookup.user.first_name || 'Unknown') : 'Unknown' %>
-                                                    </a>
-                                                </td>
-                                                <td><%= lookup.phone_number || 'N/A' %></td>
-                                                <td><%= lookup.country || 'N/A' %></td>
-                                                <td><%= lookup.created_at ? new Date(lookup.created_at).toLocaleString() : 'N/A' %></td>
-                                            </tr>
-                                        <% }); %>
-                                    <% } else { %>
-                                        <tr>
-                                            <td colspan="4" class="text-center">No recent lookups found.</td>
-                                        </tr>
-                                    <% } %>
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="card-footer clearfix">
-                            <a href="/admin/history" class="btn btn-sm btn-info float-end">View All Lookups</a>
-                        </div>
-                    </div>
+            <!-- API Key -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h4 class="card-title">Primary API Key</h4>
                 </div>
-
-                <div class="col-md-5">
-                    <!-- Bot Status -->
-                    <div class="card">
-                        <div class="card-header">
-                            <h3 class="card-title">Bot Status</h3>
-                            <div class="card-tools">
-                                <span class="badge <%= botStatus === 'active' ? 'bg-success' : 'bg-danger' %>">
-                                    <%= botStatus === 'active' ? 'Online' : 'Offline' %>
-                                </span>
+                <div class="card-body">
+                    <form action="/admin/update-api-key" method="POST">
+                        <div class="input-group mb-3">
+                            <input type="text" class="form-control" name="apiKey" value="<%= apiKey %>">
+                            <div class="input-group-append">
+                                <button type="submit" class="btn btn-primary">Update</button>
                             </div>
                         </div>
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between">
-                                <form action="/admin/bot/start" method="POST">
-                                    <button type="submit" class="btn btn-success" <%= botStatus === 'active' ? 'disabled' : '' %>>
-                                        <i class="bi bi-play-fill"></i> Start Bot
-                                    </button>
-                                </form>
-                                <form action="/admin/bot/stop" method="POST">
-                                    <button type="submit" class="btn btn-danger" <%= botStatus !== 'active' ? 'disabled' : '' %>>
-                                        <i class="bi bi-stop-fill"></i> Stop Bot
-                                    </button>
-                                </form>
-                            </div>
-                            
-                            <div class="alert alert-info mt-3">
-                                <i class="bi bi-info-circle"></i> 
-                                Bot is using API keys in rotation. Each request uses a different key to avoid rate limits.
-                            </div>
+                        <div class="text-center mt-3">
+                            <a href="/admin/api-keys" class="btn btn-outline-primary">
+                                <i class="fas fa-key"></i> Manage All API Keys
+                            </a>
                         </div>
-                    </div>
-
-                    <!-- API Key -->
-                    <div class="card mt-4">
-                        <div class="card-header">
-                            <h3 class="card-title">Primary API Key</h3>
-                        </div>
-                        <div class="card-body">
-                            <form action="/admin/update-api-key" method="POST">
-                                <div class="input-group mb-3">
-                                    <input type="text" class="form-control" name="apiKey" value="<%= apiKey %>">
-                                    <button type="submit" class="btn btn-primary">Update</button>
-                                </div>
-                            </form>
-                            <div class="text-center mt-3">
-                                <a href="/admin/api-keys" class="btn btn-outline-primary">
-                                    <i class="bi bi-key"></i> Manage All API Keys
-                                </a>
-                            </div>
-                        </div>
-                    </div>
+                    </form>
                 </div>
             </div>
         </div>
