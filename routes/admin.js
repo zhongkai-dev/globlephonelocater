@@ -5,6 +5,7 @@ const path = require('path');
 const ejs = require('ejs');
 const { User, Setting, LookupHistory, ApiKey, Proxy } = require('../models');
 const axios = require('axios');
+const mongoose = require('mongoose');
 
 // Middleware to check if user is authenticated
 const isAuthenticated = (req, res, next) => {
@@ -863,7 +864,17 @@ router.post('/bot/stop', isAuthenticated, async (req, res) => {
 // Proxy management routes
 router.get('/proxies', isAuthenticated, async (req, res) => {
     try {
-        const proxies = await Proxy.find().sort({ host: 1 });
+        console.log('Accessing proxies route...');
+        
+        // Check MongoDB connection first
+        if (mongoose.connection.readyState !== 1) {
+            console.error('MongoDB not connected - readyState:', mongoose.connection.readyState);
+            throw new Error('Database connection is not active');
+        }
+        
+        console.log('MongoDB connection OK, fetching proxies...');
+        const proxies = await Proxy.find().lean().sort({ host: 1 });
+        console.log(`Found ${proxies ? proxies.length : 'null'} proxies`);
         
         // Get flash messages safely
         let message = null;
@@ -872,17 +883,23 @@ router.get('/proxies', isAuthenticated, async (req, res) => {
             delete req.session.flash.message;
         }
         
-        res.render('admin/proxies', {
-            title: 'Proxy Management',
-            active: 'proxies',
-            activePage: 'proxies',
-            proxies: proxies,
-            message: message
-        });
+        // Handle potential template issues
+        try {
+            res.render('admin/proxies', {
+                title: 'Proxy Management',
+                active: 'proxies',
+                activePage: 'proxies',
+                proxies: proxies || [],
+                message: message
+            });
+        } catch (renderError) {
+            console.error('Error rendering proxies template:', renderError);
+            res.status(500).send(`Error rendering proxies template: ${renderError.message}`);
+        }
     } catch (error) {
-        console.error('Error fetching proxies:', error);
-        safeFlash(req, 'message', { type: 'danger', text: 'Error loading proxies: ' + error.message });
-        res.redirect('/admin/dashboard');
+        console.error('Error in proxies route:', error);
+        // Send detailed error for debugging
+        res.status(500).send(`Error loading proxies: ${error.stack || error.message}`);
     }
 });
 
