@@ -362,21 +362,37 @@ async function saveUser(user) {
     try {
         console.log('Updating user:', user.id);
         
-        // Use upsert to preserve the is_blocked status
-        await User.updateOne(
-            { telegram_id: user.id.toString() },
-            {
-                $set: {
-                    username: user.username || null,
-                    first_name: user.first_name || null,
-                    last_name: user.last_name || null
+        // First check if user exists
+        const existingUser = await User.findOne({ telegram_id: user.id.toString() });
+        
+        if (existingUser) {
+            // Update existing user
+            await User.findOneAndUpdate(
+                { telegram_id: user.id.toString() },
+                {
+                    $set: {
+                        username: user.username || existingUser.username,
+                        first_name: user.first_name || existingUser.first_name,
+                        last_name: user.last_name || existingUser.last_name
+                    }
                 }
-            },
-            { upsert: true }
-        );
+            );
+        } else {
+            // Create new user
+            await User.create({
+                telegram_id: user.id.toString(),
+                username: user.username || null,
+                first_name: user.first_name || null,
+                last_name: user.last_name || null,
+                is_blocked: 0,
+                check_limit: 1000,
+                daily_checks: 0
+            });
+        }
     } catch (error) {
         console.error('Error saving user:', error);
-        throw error;
+        // Log the error but don't throw it to prevent message handler failures
+        console.log('User data that caused error:', JSON.stringify(user));
     }
 }
 
