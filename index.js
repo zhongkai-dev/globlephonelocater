@@ -808,66 +808,6 @@ async function checkUserLimit(userId, count = 1) {
     }
 }
 
-// Function to edit message with loading indicator
-async function editMessageWithLoadingIndicator(chatId, messageId, currentNumber = 1, totalNumbers = 1, maxDots = 5) {
-    let dots = 0;
-    let isRunning = true;
-    let lastText = "";
-    
-    const timer = setInterval(async () => {
-        if (!isRunning) {
-            clearInterval(timer);
-            return;
-        }
-        
-        dots = (dots % maxDots) + 1;
-        
-        // Create the loading message with appropriate number of dots and progress counter
-        let loadingText = `${currentNumber}/${totalNumbers} Number is Checking`;
-        for (let i = 0; i < dots; i++) {
-            loadingText += " ․";
-        }
-        
-        // Don't update if the message hasn't changed
-        if (loadingText === lastText) {
-            return;
-        }
-        
-        lastText = loadingText;
-        
-        try {
-            await bot.editMessageText(loadingText, {
-                chat_id: chatId,
-                message_id: messageId,
-                parse_mode: 'HTML'
-            });
-        } catch (error) {
-            // If the error is because message is not modified, continue
-            if (error.message && error.message.includes("message is not modified")) {
-                console.log("Message is identical, continuing animation...");
-                // Don't stop the timer, just continue
-            } else {
-                // Stop for other errors
-                console.error("Error editing loading message:", error.message);
-                isRunning = false;
-                clearInterval(timer);
-            }
-        }
-    }, 300); // 300ms interval
-    
-    // Return an object with timer and stop function
-    return {
-        timer,
-        stop: () => {
-            isRunning = false;
-            clearInterval(timer);
-        },
-        updateProgress: (current) => {
-            currentNumber = current;
-        }
-    };
-}
-
 // Handle incoming messages
 bot.on('message', async (msg) => {
     try {
@@ -949,37 +889,16 @@ bot.on('message', async (msg) => {
             return;
         }
 
-        // Send initial loading message and get its ID for updates
-        const totalPhoneNumbers = phoneNumbers.length;
-        const loadingMessage = await bot.sendMessage(chatId, `Processing ${totalPhoneNumbers} phone numbers one by one...`, { parse_mode: 'HTML' });
-        const loadingIndicator = await editMessageWithLoadingIndicator(chatId, loadingMessage.message_id, 1, totalPhoneNumbers);
-        
-        // Process phone numbers one by one with progress updates
-        let completedCount = 0;
-        const updateProgressInterval = setInterval(() => {
-            // Update the progress less frequently to avoid Telegram API rate limits
-            loadingIndicator.updateProgress(completedCount + 1);
-        }, 2000);
-        
         // Process each phone number one by one
         const responses = await processPhoneNumbers(phoneNumbers, userId);
-        completedCount = responses.length;
-        
-        // Clear update interval
-        clearInterval(updateProgressInterval);
-        
-        // Stop the loading indicator
-        loadingIndicator.stop();
         
         // Combine all responses into a single message
         const fullResponse = responses.join("\n\n") + 
             `\n📊 Daily Limit: ${limitInfo.used}/${limitInfo.limit} checks used` +
             "\n<blockquote>🤖Bot by <a href=\"https://t.me/ZhongKai_KL\">中凯</a></blockquote>";
 
-        // Edit the loading message with the final response
-        await bot.editMessageText(fullResponse, {
-            chat_id: chatId,
-            message_id: loadingMessage.message_id,
+        // Send the final response directly
+        await bot.sendMessage(chatId, fullResponse, {
             parse_mode: 'HTML',
             disable_web_page_preview: true
         });
