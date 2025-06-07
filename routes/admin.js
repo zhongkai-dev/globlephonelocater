@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const ejs = require('ejs');
-const { User, Setting, LookupHistory, ApiKey, Proxy } = require('../models');
+const { User, Setting, LookupHistory, ApiKey, Proxy, ChannelPost } = require('../models');
 const axios = require('axios');
 const mongoose = require('mongoose');
 
@@ -557,20 +557,34 @@ router.get('/settings', isAuthenticated, async (req, res) => {
 // Update settings
 router.post('/settings/update', isAuthenticated, async (req, res) => {
     try {
-        const { veriphone_api_key, bot_status } = req.body;
+        const { veriphone_api_key, bot_status, telegram_channel_id, default_daily_limit } = req.body;
         
         // Update settings
         await Setting.updateOne(
             { key: 'veriphone_api_key' },
-            { $set: { value: veriphone_api_key } },
+            { $set: { value: veriphone_api_key, updated_at: new Date() } },
             { upsert: true }
         );
         
         await Setting.updateOne(
             { key: 'bot_status' },
-            { $set: { value: bot_status } },
+            { $set: { value: bot_status, updated_at: new Date() } },
             { upsert: true }
         );
+
+        await Setting.updateOne(
+            { key: 'telegram_channel_id' },
+            { $set: { value: telegram_channel_id, updated_at: new Date() } },
+            { upsert: true }
+        );
+
+        if (default_daily_limit) {
+            await Setting.updateOne(
+                { key: 'default_daily_limit' },
+                { $set: { value: default_daily_limit.toString(), updated_at: new Date() } },
+                { upsert: true }
+            );
+        }
         
         req.session.success = 'Settings updated successfully';
         res.redirect('/admin/settings');
@@ -1092,6 +1106,267 @@ router.post('/proxies/sync', isAuthenticated, async (req, res) => {
         console.error('Error syncing proxies:', error);
         safeFlash(req, 'message', { type: 'danger', text: 'Error syncing proxies: ' + error.message });
         res.redirect('/admin/proxies');
+    }
+});
+
+// Channel Posts
+router.get('/channel-posts', isAuthenticated, async (req, res) => {
+    try {
+        // Get all posts
+        const posts = await ChannelPost.find().sort({ created_at: -1 });
+        
+        res.render('admin/channel-posts', {
+            title: 'Channel Posts',
+            activePage: 'channel-posts',
+            posts,
+            error: req.session.error,
+            success: req.session.success
+        });
+        
+        // Clear session messages
+        req.session.error = null;
+        req.session.success = null;
+    } catch (error) {
+        console.error('Error loading channel posts:', error);
+        res.status(500).send('Error loading channel posts: ' + error.message);
+    }
+});
+
+// Add new post
+router.post('/channel-posts/add', isAuthenticated, async (req, res) => {
+    try {
+        const { title, content, image_url, buttons } = req.body;
+        
+        // Parse buttons if provided
+        let parsedButtons = [];
+        if (buttons) {
+            try {
+                parsedButtons = JSON.parse(buttons);
+            } catch (err) {
+                console.error('Error parsing buttons:', err);
+            }
+        }
+        
+        // Create new post
+        await ChannelPost.create({
+            title,
+            content,
+            image_url: image_url || null,
+            buttons: parsedButtons,
+            status: 'draft',
+            created_at: new Date(),
+            updated_at: new Date()
+        });
+        
+        req.session.success = 'Post created successfully';
+        res.redirect('/admin/channel-posts');
+    } catch (error) {
+        console.error('Error creating post:', error);
+        req.session.error = 'Error creating post: ' + error.message;
+        res.redirect('/admin/channel-posts');
+    }
+});
+
+// Edit post
+router.post('/channel-posts/edit', isAuthenticated, async (req, res) => {
+    try {
+        const { post_id, title, content, image_url, buttons } = req.body;
+        
+        // Parse buttons if provided
+        let parsedButtons = [];
+        if (buttons) {
+            try {
+                parsedButtons = JSON.parse(buttons);
+            } catch (err) {
+                console.error('Error parsing buttons:', err);
+            }
+        }
+        
+        // Update post
+        await ChannelPost.findByIdAndUpdate(post_id, {
+            title,
+            content,
+            image_url: image_url || null,
+            buttons: parsedButtons,
+            updated_at: new Date()
+        });
+        
+        req.session.success = 'Post updated successfully';
+        res.redirect('/admin/channel-posts');
+    } catch (error) {
+        console.error('Error updating post:', error);
+        req.session.error = 'Error updating post: ' + error.message;
+        res.redirect('/admin/channel-posts');
+    }
+});
+
+// Delete post
+router.post('/channel-posts/delete', isAuthenticated, async (req, res) => {
+    try {
+        const { post_id } = req.body;
+        
+        // Delete post
+        await ChannelPost.findByIdAndDelete(post_id);
+        
+        req.session.success = 'Post deleted successfully';
+        res.redirect('/admin/channel-posts');
+    } catch (error) {
+        console.error('Error deleting post:', error);
+        req.session.error = 'Error deleting post: ' + error.message;
+        res.redirect('/admin/channel-posts');
+    }
+});
+
+// Publish post to channel
+router.post('/channel-posts/publish', isAuthenticated, async (req, res) => {
+    try {
+        const { post_id } = req.body;
+        
+        // Get post
+        const post = await ChannelPost.findById(post_id);
+        if (!post) {
+            throw new Error('Post not found');
+        }
+        
+        // Get bot instance from global scope
+        const bot = global.bot;
+        if (!bot) {
+            throw new Error('Telegram bot not initialized');
+        }
+        
+        // Get channel ID from settings
+        const channelSetting = await Setting.findOne({ key: 'telegram_channel_id' });
+        const channelId = channelSetting ? channelSetting.value : null;
+        
+        if (!channelId) {
+            throw new Error('Telegram channel ID not configured in settings');
+        }
+        
+        // Create inline keyboard if buttons exist
+        let inlineKeyboard = undefined;
+        if (post.buttons && post.buttons.length > 0) {
+            console.log('Creating inline keyboard with buttons:', JSON.stringify(post.buttons));
+            
+            // Organize buttons into rows of 2 buttons each
+            const rows = [];
+            for (let i = 0; i < post.buttons.length; i += 2) {
+                const row = [];
+                
+                // Add first button
+                const button1 = post.buttons[i];
+                if (button1) {
+                    let btn1 = { text: button1.text };
+                    
+                    // Apply button type
+                    switch (button1.type) {
+                        case 'url':
+                            btn1.url = button1.value;
+                            break;
+                        case 'bot':
+                            // Remove @ from bot username if present
+                            const botUsername = button1.value.startsWith('@') 
+                                ? button1.value.substring(1) 
+                                : button1.value;
+                            btn1.url = `https://t.me/${botUsername}`;
+                            break;
+                        case 'support':
+                            // Support links also go to Telegram
+                            const supportUsername = button1.value.startsWith('@') 
+                                ? button1.value.substring(1) 
+                                : button1.value;
+                            btn1.url = `https://t.me/${supportUsername}`;
+                            break;
+                        case 'webapp':
+                            btn1.web_app = { url: button1.value };
+                            break;
+                    }
+                    
+                    row.push(btn1);
+                }
+                
+                // Add second button if it exists
+                const button2 = post.buttons[i + 1];
+                if (button2) {
+                    let btn2 = { text: button2.text };
+                    
+                    // Apply button type
+                    switch (button2.type) {
+                        case 'url':
+                            btn2.url = button2.value;
+                            break;
+                        case 'bot':
+                            // Remove @ from bot username if present
+                            const botUsername = button2.value.startsWith('@') 
+                                ? button2.value.substring(1) 
+                                : button2.value;
+                            btn2.url = `https://t.me/${botUsername}`;
+                            break;
+                        case 'support':
+                            // Support links also go to Telegram
+                            const supportUsername = button2.value.startsWith('@') 
+                                ? button2.value.substring(1) 
+                                : button2.value;
+                            btn2.url = `https://t.me/${supportUsername}`;
+                            break;
+                        case 'webapp':
+                            btn2.web_app = { url: button2.value };
+                            break;
+                    }
+                    
+                    row.push(btn2);
+                }
+                
+                if (row.length > 0) {
+                    rows.push(row);
+                }
+            }
+            
+            // Create the inline keyboard
+            inlineKeyboard = {
+                inline_keyboard: rows
+            };
+            
+            console.log('Final inline keyboard:', JSON.stringify(inlineKeyboard));
+        }
+        
+        // Configure message options
+        const messageOptions = {
+            parse_mode: 'HTML'
+        };
+        
+        // Add inline keyboard if buttons exist
+        if (inlineKeyboard) {
+            messageOptions.reply_markup = inlineKeyboard;
+        }
+        
+        // Send the message
+        let messageResult;
+        if (post.image_url) {
+            // Send with image
+            messageResult = await bot.sendPhoto(channelId, post.image_url, {
+                caption: post.content,
+                ...messageOptions
+            });
+        } else {
+            // Send text only
+            messageResult = await bot.sendMessage(channelId, post.content, messageOptions);
+        }
+        
+        console.log('Message sent successfully:', messageResult ? messageResult.message_id : 'No message ID');
+        
+        // Update post status
+        await ChannelPost.findByIdAndUpdate(post_id, {
+            status: 'published',
+            published_at: new Date(),
+            updated_at: new Date()
+        });
+        
+        req.session.success = 'Post published successfully to channel';
+        res.redirect('/admin/channel-posts');
+    } catch (error) {
+        console.error('Error publishing post:', error);
+        req.session.error = 'Error publishing post: ' + error.message;
+        res.redirect('/admin/channel-posts');
     }
 });
 

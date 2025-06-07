@@ -70,6 +70,7 @@ const Setting = require('./Setting');
 const LookupHistory = require('./LookupHistory');
 const ApiKey = require('./ApiKey');
 const Proxy = require('./Proxy');
+const ChannelPost = require('./ChannelPost');
 
 // Create User model if it doesn't exist
 const userSchema = new mongoose.Schema({
@@ -135,6 +136,23 @@ const ProxyModel = Proxy || mongoose.models.Proxy || mongoose.model('Proxy', mon
     created_at: { type: Date, default: Date.now },
     updated_at: { type: Date, default: Date.now }
 }));
+const ChannelPostModel = mongoose.models.ChannelPost || mongoose.model('ChannelPost', mongoose.Schema({
+    title: { type: String, required: true },
+    content: { type: String, required: true },
+    image_url: String,
+    buttons: [
+        {
+            type: { type: String, enum: ['url', 'bot', 'support', 'webapp'], required: true },
+            text: { type: String, required: true },
+            value: { type: String, required: true }
+        }
+    ],
+    status: { type: String, enum: ['draft', 'published', 'archived'], default: 'draft' },
+    sent_to: [String],
+    created_at: { type: Date, default: Date.now },
+    updated_at: { type: Date, default: Date.now },
+    published_at: Date
+}));
 
 // Initialize default settings, API keys, etc.
 const initializeDatabase = async () => {
@@ -161,7 +179,8 @@ const initializeDatabase = async () => {
             Setting: SettingModel, 
             LookupHistory: LookupHistoryModel, 
             ApiKey: ApiKeyModel, 
-            Proxy: ProxyModel 
+            Proxy: ProxyModel,
+            ChannelPost: ChannelPostModel
         };
     } catch (error) {
         console.error('Failed to initialize database:', error);
@@ -171,7 +190,8 @@ const initializeDatabase = async () => {
             Setting: SettingModel, 
             LookupHistory: LookupHistoryModel, 
             ApiKey: ApiKeyModel, 
-            Proxy: ProxyModel 
+            Proxy: ProxyModel,
+            ChannelPost: ChannelPostModel
         };
     }
 };
@@ -183,5 +203,6 @@ module.exports = {
     LookupHistory: LookupHistoryModel,
     ApiKey: ApiKeyModel,
     Proxy: ProxyModel,
+    ChannelPost: ChannelPostModel,
     initializeDatabase
 }; 

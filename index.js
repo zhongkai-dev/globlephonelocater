@@ -119,6 +119,9 @@ try {
         bot.on('error', (error) => {
             console.error('Telegram bot error:', error.message);
         });
+
+        // Make bot available globally for channel posts
+        global.bot = bot;
         
         console.log("✅ Telegram bot initialized successfully");
     }

@@ -1,0 +1,67 @@
+<%- include('partials/header') %>
+
+<div class="page-inner">
+    <div class="page-header">
+        <h4 class="page-title">Settings</h4>
+    </div>
+    
+    <% if (success) { %>
+        <div class="alert alert-success">
+            <%= success %>
+        </div>
+    <% } %>
+    
+    <% if (error) { %>
+        <div class="alert alert-danger">
+            <%= error %>
+        </div>
+    <% } %>
+    
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Bot Settings</h4>
+                </div>
+                <div class="card-body">
+                    <form action="/admin/settings/update" method="POST">
+                        <div class="form-group">
+                            <label for="default_daily_limit">Default Daily Limit</label>
+                            <input type="number" class="form-control" id="default_daily_limit" name="default_daily_limit" value="<%= settings.default_daily_limit || 1000 %>" min="1" required>
+                            <small class="form-text text-muted">Default number of lookups a user can perform per day</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="veriphone_api_key">Veriphone API Key</label>
+                            <input type="text" class="form-control" id="veriphone_api_key" name="veriphone_api_key" value="<%= settings.veriphone_api_key || '' %>">
+                            <small class="form-text text-muted">API key for Veriphone service</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="telegram_channel_id">Telegram Channel ID</label>
+                            <input type="text" class="form-control" id="telegram_channel_id" name="telegram_channel_id" value="<%= settings.telegram_channel_id || '' %>" placeholder="@channel_name or -100123456789">
+                            <small class="form-text text-muted">ID of the Telegram channel where posts will be published</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Bot Status</label>
+                            <div class="custom-control custom-radio">
+                                <input type="radio" id="status_active" name="bot_status" value="active" class="custom-control-input" <%= settings.bot_status === 'active' ? 'checked' : '' %>>
+                                <label class="custom-control-label" for="status_active">Active</label>
+                            </div>
+                            <div class="custom-control custom-radio">
+                                <input type="radio" id="status_inactive" name="bot_status" value="inactive" class="custom-control-input" <%= settings.bot_status === 'inactive' ? 'checked' : '' %>>
+                                <label class="custom-control-label" for="status_inactive">Inactive</label>
+                            </div>
+                            <small class="form-text text-muted">Enable or disable the bot</small>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Save Settings</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %> 
