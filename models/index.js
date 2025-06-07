@@ -1,23 +1,27 @@
 const mongoose = require('mongoose');
 
-// MongoDB connection
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://phonelocator:phonelocator@cluster0.i9c1x.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
+// MongoDB connection - use only environment variables, no hardcoded credentials
+const MONGO_URI = process.env.MONGODB_URI;
 
-// Connect to MongoDB with more robust connection options
-mongoose.connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-    socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-    family: 4, // Use IPv4, skip trying IPv6
-    maxPoolSize: 10, // Maintain up to 10 socket connections
-    retryWrites: true,
-    retryReads: true,
-})
-    .then(() => console.log('MongoDB connected successfully'))
-    .catch(err => {
-        console.error('MongoDB connection error:', err);
-        console.error('Connection string:', MONGO_URI.replace(/mongodb\+srv:\/\/[^:]+:[^@]+@/, 'mongodb+srv://username:password@'));
-        console.log('Continuing application startup despite MongoDB connection issue');
-    });
+// Only attempt connection if MONGODB_URI is provided
+if (!MONGO_URI) {
+    console.warn('MONGODB_URI environment variable not set. Database functionality will be limited.');
+} else {
+    // Connect to MongoDB with more robust connection options
+    mongoose.connect(MONGO_URI, {
+        serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+        socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+        family: 4, // Use IPv4, skip trying IPv6
+        maxPoolSize: 10, // Maintain up to 10 socket connections
+        retryWrites: true,
+        retryReads: true,
+    })
+        .then(() => console.log('MongoDB connected successfully'))
+        .catch(err => {
+            console.error('MongoDB connection error:', err);
+            console.log('Continuing application startup despite MongoDB connection issue');
+        });
+}
 
 // Add connection event listeners
 mongoose.connection.on('connected', () => {
