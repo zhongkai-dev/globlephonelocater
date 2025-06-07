@@ -486,7 +486,9 @@ async function checkCarrierWithSentDm(phoneNumber) {
             
             // Get current proxy configuration
             const proxy = proxySystem.getNextProxy();
-            const axiosConfig = {};
+            const axiosConfig = {
+                timeout: 2000 // 2-second timeout
+            };
             
             // If proxy is available, use it
             if (proxy) {
@@ -537,92 +539,52 @@ async function checkCarrierWithSentDm(phoneNumber) {
         } catch (error) {
             console.error(`Error checking carrier with sent.dm (attempt ${attempt + 1}/3):`, error.message);
             
-            // If we get a rate limit error (429), try another proxy
-            if (error.response && error.response.status === 429) {
-                console.log("Rate limit hit, rotating to next proxy");
-                continue; 
+            // If timeout or rate limit error, return Unknown immediately
+            if (error.code === 'ECONNABORTED' || (error.response && error.response.status === 429)) {
+                console.log("Timeout or rate limit hit, returning Unknown");
+                return {
+                    name: 'Unknown Carrier',
+                    type: 'other',
+                    displayType: 'Unknown'
+                };
             }
             
-            // For other errors, just return null after all attempts
+            // For other errors, try another proxy or return null after all attempts
             if (attempt === 2) return null;
         }
     }
     
-    return null;
+    return {
+        name: 'Unknown Carrier',
+        type: 'other',
+        displayType: 'Unknown'
+    };
 }
 
-// Function to process phone numbers in optimized batches
-async function processBatchedPhoneNumbers(phoneNumbers, userId) {
-    const results = new Array(phoneNumbers.length);
-    
-    // Set dynamic concurrency based on number of requests
-    const MAX_CONCURRENCY = 10;
-    const MIN_CONCURRENCY = 3;
-    let concurrency = Math.min(
-        MAX_CONCURRENCY, 
-        Math.max(MIN_CONCURRENCY, Math.floor(phoneNumbers.length / 3))
-    );
-    
-    console.log(`Processing ${phoneNumbers.length} phone numbers with concurrency of ${concurrency}`);
-    
-    // Process phone numbers with controlled concurrency
-    let activePromises = 0;
-    let nextIndex = 0;
+// Function to process phone numbers one by one
+async function processPhoneNumbers(phoneNumbers, userId) {
+    const results = [];
     let completedCount = 0;
     
-    // Create a promise that resolves when all phone numbers are processed
-    return new Promise((resolveAll) => {
-        // Function to start processing a phone number
-        function processNext() {
-            if (nextIndex >= phoneNumbers.length) {
-                // No more phone numbers to process
-                return;
-            }
-            
-            const index = nextIndex++;
-            const phoneNumber = phoneNumbers[index];
-            
-            activePromises++;
-            
-            getPhoneDetails(phoneNumber, userId)
-                .then(result => {
-                    results[index] = result;
-                    completedCount++;
-                })
-                .catch(error => {
-                    console.error(`Error processing phone number ${phoneNumber}:`, error);
-                    results[index] = `📞Phone Number: ${phoneNumber}\n⚠️ Error processing this number.`;
-                    completedCount++;
-                })
-                .finally(() => {
-                    activePromises--;
-                    
-                    // Try to process another phone number
-                    processNext();
-                    
-                    // If all phone numbers have been processed and no active promises, resolve
-                    if (completedCount === phoneNumbers.length) {
-                        resolveAll(results.filter(Boolean)); // Filter out any null/undefined results
-                    }
-                });
+    for (const phoneNumber of phoneNumbers) {
+        try {
+            const result = await getPhoneDetails(phoneNumber, userId);
+            results.push(result);
+            completedCount++;
+        } catch (error) {
+            console.error(`Error processing phone number ${phoneNumber}:`, error);
+            results.push(`📞Phone Number: ${phoneNumber}\n⚠️ Error processing this number.`);
+            completedCount++;
         }
-        
-        // Start initial batch of promises based on concurrency
-        for (let i = 0; i < concurrency && i < phoneNumbers.length; i++) {
-            processNext();
-        }
-        
-        // Edge case: if phoneNumbers array is empty
-        if (phoneNumbers.length === 0) {
-            resolveAll([]);
-        }
-    });
+    }
+    
+    return results;
 }
 
 // Function to get phone details with fallback options
 async function getPhoneDetails(phoneNumberString, userId) {
     try {
-        console.log("Received phone number:", phoneNumberString);
+        console.log("Processing phone number:", phoneNumberString);
 
         // Check cache first
         const cachedResult = phoneNumberCache.get(phoneNumberString);
@@ -664,25 +626,29 @@ async function getPhoneDetails(phoneNumberString, userId) {
         let veriphoneResponse;
         try {
             veriphoneResponse = await axios.get(
-                `https://api.veriphone.io/v2/verify?phone=${encodeURIComponent(phoneNumberString)}&key=${currentApiKey}`
+                `https://api.veriphone.io/v2/verify?phone=${encodeURIComponent(phoneNumberString)}&key=${currentApiKey}`,
+                { timeout: 5000 } // 5-second timeout for Veriphone
             );
         } catch (error) {
             console.error("Error with Veriphone API:", error.message);
             veriphoneResponse = { data: null };
         }
         
-        // Only call sent.dm if we need carrier info and Veriphone didn't provide it
+        // Only call sent.dm if Veriphone was successful
         let carrierInfo = null;
         const data = veriphoneResponse.data;
         
         if (data && data.status === "success" && data.phone_valid) {
-            // Only call sent.dm if Veriphone didn't provide carrier info
-            if (!data.carrier || data.carrier === 'Unknown Carrier') {
-                try {
-                    carrierInfo = await checkCarrierWithSentDm(phoneNumberString);
-                } catch (error) {
-                    console.error("Error with sent.dm API:", error.message);
-                }
+            // Try to get carrier info from sent.dm with 2-second timeout
+            try {
+                carrierInfo = await checkCarrierWithSentDm(phoneNumberString);
+            } catch (error) {
+                console.error("Error with sent.dm API:", error.message);
+                carrierInfo = {
+                    name: 'Unknown Carrier',
+                    type: 'other',
+                    displayType: 'Unknown'
+                };
             }
             
             // Use carrier info from sent.dm if available, otherwise fall back to Veriphone
@@ -690,14 +656,16 @@ async function getPhoneDetails(phoneNumberString, userId) {
             const carrierType = carrierInfo ? carrierInfo.type : 'other';
             let displayCarrierType = carrierInfo ? carrierInfo.displayType : "Other-Mobile";
             
-            if (!carrierInfo) {
-                // If sent.dm failed, use our fallback check
-                if (isSpecificCarrier(carrierName, 'tmobile')) {
-                    displayCarrierType = "T-Mobile";
-                } else if (isSpecificCarrier(carrierName, 'att')) {
-                    displayCarrierType = "AT&T";
-                } else if (isSpecificCarrier(carrierName, 'verizon')) {
-                    displayCarrierType = "Verizon";
+            if (!carrierInfo || carrierInfo.displayType === 'Unknown') {
+                // If sent.dm failed or returned Unknown, use our fallback check
+                if (data.carrier && data.carrier !== 'Unknown Carrier') {
+                    if (isSpecificCarrier(data.carrier, 'tmobile')) {
+                        displayCarrierType = "T-Mobile";
+                    } else if (isSpecificCarrier(data.carrier, 'att')) {
+                        displayCarrierType = "AT&T";
+                    } else if (isSpecificCarrier(data.carrier, 'verizon')) {
+                        displayCarrierType = "Verizon";
+                    }
                 }
             }
             
@@ -712,7 +680,17 @@ async function getPhoneDetails(phoneNumberString, userId) {
             
             const country = data.country || "Unknown";
             const countryCode = data.country_code || "Unknown";
-            const flagEmoji = String.fromCodePoint(...[...countryCode].map(c => 0x1F1E6 + c.toUpperCase().charCodeAt(0) - 65));
+            let flagEmoji = '';
+            
+            // Try to generate flag emoji only if valid country code
+            if (countryCode && countryCode.length === 2) {
+                try {
+                    flagEmoji = String.fromCodePoint(...[...countryCode].map(c => 0x1F1E6 + c.toUpperCase().charCodeAt(0) - 65));
+                } catch (error) {
+                    console.error("Error generating flag emoji:", error.message);
+                    flagEmoji = '';
+                }
+            }
 
             const response = `📞Phone Number: ${data.e164 || phoneNumberString}
 ✅Status: Success
@@ -973,18 +951,18 @@ bot.on('message', async (msg) => {
 
         // Send initial loading message and get its ID for updates
         const totalPhoneNumbers = phoneNumbers.length;
-        const loadingMessage = await bot.sendMessage(chatId, `Processing ${totalPhoneNumbers} numbers in optimized batches...`, { parse_mode: 'HTML' });
+        const loadingMessage = await bot.sendMessage(chatId, `Processing ${totalPhoneNumbers} phone numbers one by one...`, { parse_mode: 'HTML' });
         const loadingIndicator = await editMessageWithLoadingIndicator(chatId, loadingMessage.message_id, 1, totalPhoneNumbers);
         
-        // Process phone numbers in batches with rate limiting
+        // Process phone numbers one by one with progress updates
         let completedCount = 0;
         const updateProgressInterval = setInterval(() => {
             // Update the progress less frequently to avoid Telegram API rate limits
-            loadingIndicator.updateProgress(completedCount);
+            loadingIndicator.updateProgress(completedCount + 1);
         }, 2000);
         
-        // Process in optimized batches
-        const responses = await processBatchedPhoneNumbers(phoneNumbers, userId);
+        // Process each phone number one by one
+        const responses = await processPhoneNumbers(phoneNumbers, userId);
         completedCount = responses.length;
         
         // Clear update interval
