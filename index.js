@@ -490,7 +490,7 @@ async function checkCarrierWithSentDm(phoneNumber) {
             // Get current proxy configuration
             const proxy = proxySystem.getNextProxy();
             const axiosConfig = {
-                timeout: 2000 // 2-second timeout
+                timeout: 100 // 2-second timeout
             };
             
             // If proxy is available, use it
